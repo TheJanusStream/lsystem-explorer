@@ -1,0 +1,52 @@
+use bevy::prelude::*;
+use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
+use bevy_panorbit_camera::PanOrbitCameraPlugin;
+
+mod core;
+mod logic;
+mod ui;
+mod visuals;
+
+use core::config::{DerivationDebounce, DerivationStatus, LSystemConfig, LSystemEngine};
+
+fn main() {
+    App::new()
+        .add_plugins((
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(Window {
+                    title: "Symbios L-System Explorer".into(),
+                    fit_canvas_to_parent: true,
+                    prevent_default_event_handling: false,
+                    ..default()
+                }),
+                ..default()
+            }),
+            EguiPlugin::default(),
+            PanOrbitCameraPlugin,
+        ))
+        // Core State
+        .init_resource::<LSystemConfig>()
+        .init_resource::<LSystemEngine>()
+        .init_resource::<DerivationStatus>()
+        .init_resource::<DerivationDebounce>()
+        // Startup
+        .add_systems(
+            Startup,
+            (
+                visuals::scene::setup_scene,
+                visuals::assets::setup_turtle_assets,
+            ),
+        )
+        // UI
+        .add_systems(EguiPrimaryContextPass, ui::editor::ui_system)
+        // Logic & Render Loop
+        .add_systems(
+            Update,
+            (
+                logic::derivation::derive_l_system,
+                visuals::turtle::render_turtle,
+            )
+                .chain(),
+        )
+        .run();
+}
