@@ -104,7 +104,6 @@ pub fn derive_l_system(
     if axiom_set {
         if let Err(e) = sys.derive(config.iterations) {
             status.error = Some(format!("Derivation error: {}", e));
-            return;
         }
     } else {
         // Warning if no axiom?

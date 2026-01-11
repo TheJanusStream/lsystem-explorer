@@ -1,12 +1,12 @@
-use std::time::Instant;
-
 use crate::core::config::{LSystemConfig, LSystemEngine};
-use crate::visuals::assets::{SymbolCache, TurtleMaterialHandle, TurtleMeshHandle};
+use crate::visuals::assets::{SymbolCache, TurtleMaterialHandle};
+use crate::visuals::mesher::LSystemMeshBuilder;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
+use std::time::Instant;
 
 #[derive(Component)]
-pub struct TurtleSegment;
+pub struct LSystemMeshTag;
 
 #[derive(Clone, Copy, Debug)]
 pub struct TurtleState {
@@ -38,81 +38,83 @@ pub enum TurtleOp {
     Ignore,
 }
 
-#[derive(Resource, Default)]
-pub struct TurtleRenderState {
-    pub current_index: usize,
-    pub current_turtle: TurtleState,
-    pub stack: Vec<TurtleState>,
-    pub op_cache: HashMap<u16, TurtleOp>,
-    pub is_finished: bool,
-    pub total_segments: usize,
-    pub processed_count: usize,
+/// Stores state for the Stack (Push/Pop)
+#[derive(Clone, Copy, Debug)]
+pub struct StackFrame {
+    pub state: TurtleState,
+    /// The index of the vertex ring at this point in the stack.
+    /// Allows branches to connect back to this point.
+    pub ring_index: Option<u32>,
 }
 
+#[derive(Resource, Default)]
+pub struct TurtleRenderState {
+    // Metrics only - logic state is now local to the system function
+    pub total_vertices: usize,
+    pub generation_time_ms: f32,
+}
+
+#[allow(clippy::too_many_arguments)]
 pub fn render_turtle(
     mut commands: Commands,
     engine: Res<LSystemEngine>,
     config: Res<LSystemConfig>,
-    mesh: Res<TurtleMeshHandle>,
-    mat: Res<TurtleMaterialHandle>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mat_handle: Res<TurtleMaterialHandle>,
     mut symbol_cache: ResMut<SymbolCache>,
     mut render_state: ResMut<TurtleRenderState>,
-    segments: Query<Entity, With<TurtleSegment>>,
+    old_meshes: Query<Entity, With<LSystemMeshTag>>,
 ) {
     let sys = &engine.0;
 
-    // FIX: Only reset if the ENGINE has changed.
-    // `config.is_changed()` is true every frame due to Egui's mutable borrow.
-    if engine.is_changed() {
-        for entity in &segments {
-            commands.entity(entity).despawn();
-        }
-
-        symbol_cache.refresh(&sys.interner);
-
-        let mut op_map = HashMap::new();
-        let sc = &*symbol_cache;
-        let mut insert = |sym: Option<u16>, op: TurtleOp| {
-            if let Some(s) = sym {
-                op_map.insert(s, op);
-            }
-        };
-
-        insert(sc.f_draw, TurtleOp::Draw);
-        insert(sc.f_move, TurtleOp::Move);
-        insert(sc.yaw_pos, TurtleOp::Yaw(1.0));
-        insert(sc.yaw_neg, TurtleOp::Yaw(-1.0));
-        insert(sc.pitch_pos, TurtleOp::Pitch(1.0));
-        insert(sc.pitch_neg, TurtleOp::Pitch(-1.0));
-        insert(sc.roll_pos, TurtleOp::Roll(1.0));
-        insert(sc.roll_neg, TurtleOp::Roll(-1.0));
-        insert(sc.turn_around, TurtleOp::TurnAround);
-        insert(sc.vertical, TurtleOp::Vertical);
-        insert(sc.set_width, TurtleOp::SetWidth);
-        insert(sc.push, TurtleOp::Push);
-        insert(sc.pop, TurtleOp::Pop);
-
-        *render_state = TurtleRenderState {
-            current_index: 0,
-            current_turtle: TurtleState {
-                width: sys.constants.get("width").map(|&w| w as f32).unwrap_or(0.1),
-                ..default()
-            },
-            stack: Vec::with_capacity(64),
-            op_cache: op_map,
-            is_finished: false,
-            total_segments: 0,
-            processed_count: 0,
-        };
-    }
-
-    if render_state.is_finished || sys.state.is_empty() {
+    if !engine.is_changed() {
         return;
     }
 
-    // 2. Time-Budgeted Loop (8ms)
+    for entity in &old_meshes {
+        commands.entity(entity).despawn();
+    }
+
+    if sys.state.is_empty() {
+        return;
+    }
+
     let start_time = Instant::now();
-    let time_budget = std::time::Duration::from_millis(8);
+
+    symbol_cache.refresh(&sys.interner);
+    let mut op_map = HashMap::new();
+    let sc = &*symbol_cache;
+    let mut insert = |sym: Option<u16>, op: TurtleOp| {
+        if let Some(s) = sym {
+            op_map.insert(s, op);
+        }
+    };
+
+    insert(sc.f_draw, TurtleOp::Draw);
+    insert(sc.f_move, TurtleOp::Move);
+    insert(sc.yaw_pos, TurtleOp::Yaw(1.0));
+    insert(sc.yaw_neg, TurtleOp::Yaw(-1.0));
+    insert(sc.pitch_pos, TurtleOp::Pitch(1.0));
+    insert(sc.pitch_neg, TurtleOp::Pitch(-1.0));
+    insert(sc.roll_pos, TurtleOp::Roll(1.0));
+    insert(sc.roll_neg, TurtleOp::Roll(-1.0));
+    insert(sc.turn_around, TurtleOp::TurnAround);
+    insert(sc.vertical, TurtleOp::Vertical);
+    insert(sc.set_width, TurtleOp::SetWidth);
+    insert(sc.push, TurtleOp::Push);
+    insert(sc.pop, TurtleOp::Pop);
+
+    // Setup Builder
+    let mut builder = LSystemMeshBuilder::default();
+    let mut state = TurtleState {
+        width: sys.constants.get("width").map(|&w| w as f32).unwrap_or(0.1),
+        ..default()
+    };
+    let mut stack: Vec<StackFrame> = Vec::with_capacity(64);
+
+    // We track the index of the "current" ring of vertices.
+    // If None, we haven't started a segment chain yet.
+    let mut last_ring_idx: Option<u32> = None;
 
     let default_step = sys
         .constants
@@ -126,107 +128,104 @@ pub fn render_turtle(
         .unwrap_or(config.default_angle)
         .to_radians();
 
-    let mut idx = render_state.current_index;
-    let max_len = sys.state.len();
-
-    while idx < max_len {
-        if idx % 100 == 0 && start_time.elapsed() > time_budget {
-            break;
-        }
-
-        let view = match sys.state.get_view(idx) {
+    // Loop through ALL modules at once (Fast enough for <500k modules)
+    for i in 0..sys.state.len() {
+        let view = match sys.state.get_view(i) {
             Some(v) => v,
-            None => {
-                idx = max_len;
-                break;
-            }
+            None => break,
         };
 
-        let op = render_state
-            .op_cache
-            .get(&view.sym)
-            .unwrap_or(&TurtleOp::Ignore);
+        let op = op_map.get(&view.sym).unwrap_or(&TurtleOp::Ignore);
         let get_val =
             |default: f32| -> f32 { view.params.first().map(|&x| x as f32).unwrap_or(default) };
 
         match op {
             TurtleOp::Draw => {
                 let len = get_val(default_step);
-                let t = render_state.current_turtle;
 
-                if len > 0.001 && t.width > 0.001 {
-                    let draw_pos = t.transform.translation + t.transform.up() * (len / 2.0);
-
-                    commands.spawn((
-                        Mesh3d(mesh.0.clone()),
-                        MeshMaterial3d(mat.0.clone()),
-                        Transform {
-                            translation: draw_pos,
-                            rotation: t.transform.rotation,
-                            scale: Vec3::new(t.width, len, t.width),
-                        },
-                        TurtleSegment,
-                    ));
-                    render_state.total_segments += 1;
+                // 1. Ensure we have a start ring
+                if last_ring_idx.is_none() {
+                    last_ring_idx = Some(builder.add_ring(state.transform, state.width / 2.0));
                 }
-                render_state.current_turtle.transform.translation += t.transform.up() * len;
+
+                // 2. Move
+                state.transform.translation += state.transform.up() * len;
+
+                // 3. Create End Ring
+                let new_ring_idx = builder.add_ring(state.transform, state.width / 2.0);
+
+                // 4. Connect
+                if let Some(prev) = last_ring_idx {
+                    builder.connect_rings(prev, new_ring_idx);
+                }
+
+                // 5. Advance
+                last_ring_idx = Some(new_ring_idx);
             }
             TurtleOp::Move => {
                 let len = get_val(default_step);
-                let delta = render_state.current_turtle.transform.up() * len;
-                render_state.current_turtle.transform.translation += delta;
+                state.transform.translation += state.transform.up() * len;
+                // Move breaks the mesh continuity
+                last_ring_idx = None;
             }
             TurtleOp::Yaw(sign) => {
                 let angle = get_val(default_angle.to_degrees()).to_radians() * sign;
-                render_state.current_turtle.transform.rotate_local_z(angle);
+                state.transform.rotate_local_z(angle);
             }
             TurtleOp::Pitch(sign) => {
                 let angle = get_val(default_angle.to_degrees()).to_radians() * sign;
-                render_state.current_turtle.transform.rotate_local_x(angle);
+                state.transform.rotate_local_x(angle);
             }
             TurtleOp::Roll(sign) => {
                 let angle = get_val(default_angle.to_degrees()).to_radians() * sign;
-                render_state.current_turtle.transform.rotate_local_y(angle);
+                state.transform.rotate_local_y(angle);
             }
             TurtleOp::TurnAround => {
-                render_state
-                    .current_turtle
-                    .transform
-                    .rotate_local_z(std::f32::consts::PI);
+                state.transform.rotate_local_z(std::f32::consts::PI);
             }
             TurtleOp::Vertical => {
-                let h = render_state.current_turtle.transform.up();
+                let h = state.transform.up();
                 let v = Vec3::Y;
                 let l = v.cross(*h).normalize_or_zero();
                 if l.length_squared() > 0.001 {
                     let u = h.cross(l).normalize();
                     let rot_matrix = Mat3::from_cols(-l, *h, u);
-                    render_state.current_turtle.transform.rotation = Quat::from_mat3(&rot_matrix);
+                    state.transform.rotation = Quat::from_mat3(&rot_matrix);
                 }
             }
             TurtleOp::SetWidth => {
-                let w = get_val(render_state.current_turtle.width);
-                render_state.current_turtle.width = w;
+                state.width = get_val(state.width);
             }
             TurtleOp::Push => {
-                let t = render_state.current_turtle;
-                render_state.stack.push(t);
+                // Save current state AND the current ring index
+                // This allows the branch to attach to the current ring
+                stack.push(StackFrame {
+                    state,
+                    ring_index: last_ring_idx,
+                });
             }
             TurtleOp::Pop => {
-                if let Some(s) = render_state.stack.pop() {
-                    render_state.current_turtle = s;
+                if let Some(frame) = stack.pop() {
+                    state = frame.state;
+                    // Restore the ring index.
+                    // This means the next Draw command will connect back to where we pushed.
+                    last_ring_idx = frame.ring_index;
                 }
             }
             TurtleOp::Ignore => {}
         }
-
-        idx += 1;
     }
 
-    render_state.current_index = idx;
-    render_state.processed_count = idx;
+    let final_mesh = builder.build();
+    render_state.total_vertices = final_mesh.count_vertices();
+    let mesh_handle = meshes.add(final_mesh);
 
-    if render_state.current_index >= sys.state.len() {
-        render_state.is_finished = true;
-    }
+    commands.spawn((
+        Mesh3d(mesh_handle),
+        MeshMaterial3d(mat_handle.0.clone()),
+        Transform::IDENTITY,
+        LSystemMeshTag,
+    ));
+
+    render_state.generation_time_ms = start_time.elapsed().as_secs_f32() * 1000.0;
 }

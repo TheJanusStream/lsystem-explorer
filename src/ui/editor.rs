@@ -58,11 +58,9 @@ pub fn ui_system(
                                 .desired_width(f32::INFINITY),
                         );
 
-                        if response.changed() {
-                            if config.auto_update {
-                                debounce.timer.reset();
-                                debounce.pending = true;
-                            }
+                        if response.changed() && config.auto_update {
+                            debounce.timer.reset();
+                            debounce.pending = true;
                         }
                     });
 
@@ -80,15 +78,14 @@ pub fn ui_system(
                     });
                 } else if debounce.pending {
                     ui.colored_label(egui::Color32::YELLOW, "⏳ Typing...");
-                } else if !render_state.is_finished {
-                    ui.horizontal(|ui| {
-                        ui.colored_label(egui::Color32::GREEN, "🌱 Growing...");
-                        ui.label(format!("Segments: {}", render_state.total_segments));
-                    });
                 } else {
-                    ui.horizontal(|ui| {
-                        ui.colored_label(egui::Color32::GREEN, "✅ Done");
-                        ui.label(format!("Total: {}", render_state.total_segments));
+                    ui.vertical(|ui| {
+                        ui.colored_label(egui::Color32::GREEN, "✅ Mesh Ready");
+                        ui.label(format!("Vertices: {}", render_state.total_vertices));
+                        ui.label(format!(
+                            "Gen Time: {:.2}ms",
+                            render_state.generation_time_ms
+                        ));
                     });
                 }
 
@@ -117,11 +114,9 @@ pub fn ui_system(
                 ui.add_space(5.0);
                 ui.checkbox(&mut config.auto_update, "Live Update");
 
-                if !config.auto_update {
-                    if ui.button("▶ Run / Recompile").clicked() {
-                        config.recompile_requested = true;
-                        debounce.pending = false;
-                    }
+                if !config.auto_update && ui.button("▶ Run / Recompile").clicked() {
+                    config.recompile_requested = true;
+                    debounce.pending = false;
                 }
             });
     }
