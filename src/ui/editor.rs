@@ -1,5 +1,6 @@
 use crate::core::config::{DerivationDebounce, DerivationStatus, LSystemConfig};
 use crate::core::presets::PRESETS;
+use crate::visuals::turtle::TurtleRenderState; // Import RenderState
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
@@ -8,6 +9,7 @@ pub fn ui_system(
     mut config: ResMut<LSystemConfig>,
     mut debounce: ResMut<DerivationDebounce>,
     status: Res<DerivationStatus>,
+    render_state: Res<TurtleRenderState>, // Add this resource
     time: Res<Time>,
 ) {
     // Tick debounce timer
@@ -23,6 +25,7 @@ pub fn ui_system(
         egui::Window::new("Symbios Lab")
             .default_width(350.0)
             .show(ctx, |ui| {
+                // ... (Presets UI same as before) ...
                 egui::containers::Sides::new().show(
                     ui,
                     |ui| {
@@ -36,7 +39,6 @@ pub fn ui_system(
                                     if ui.selectable_label(false, preset.name).clicked() {
                                         config.source_code = preset.code.to_string();
                                         config.recompile_requested = true;
-                                        // Cancel debounce on explicit load
                                         debounce.pending = false;
                                     }
                                 }
@@ -67,7 +69,6 @@ pub fn ui_system(
                 ui.add_space(5.0);
 
                 // Status Indicator
-                ui.add_space(5.0);
                 if let Some(err) = &status.error {
                     ui.group(|ui| {
                         ui.colored_label(egui::Color32::RED, "❌ Parse Error:");
@@ -79,29 +80,33 @@ pub fn ui_system(
                     });
                 } else if debounce.pending {
                     ui.colored_label(egui::Color32::YELLOW, "⏳ Typing...");
+                } else if !render_state.is_finished {
+                    ui.horizontal(|ui| {
+                        ui.colored_label(egui::Color32::GREEN, "🌱 Growing...");
+                        ui.label(format!("Segments: {}", render_state.total_segments));
+                    });
                 } else {
-                    ui.colored_label(egui::Color32::GREEN, "✅ System Valid");
+                    ui.horizontal(|ui| {
+                        ui.colored_label(egui::Color32::GREEN, "✅ Done");
+                        ui.label(format!("Total: {}", render_state.total_segments));
+                    });
                 }
 
                 ui.add_space(5.0);
 
-                // Iterations: Stepper Buttons (Safety vs Slider)
+                // Iterations
                 ui.horizontal(|ui| {
                     ui.label("Iterations:");
-
                     if ui.button("➖").clicked() && config.iterations > 0 {
                         config.iterations -= 1;
                         config.recompile_requested = true;
                         debounce.pending = false;
                     }
-
-                    // Display count
                     ui.label(
                         egui::RichText::new(format!("{}", config.iterations))
                             .strong()
                             .size(16.0),
                     );
-
                     if ui.button("➕").clicked() {
                         config.iterations += 1;
                         config.recompile_requested = true;
