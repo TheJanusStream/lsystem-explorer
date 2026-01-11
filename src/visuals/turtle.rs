@@ -38,18 +38,14 @@ pub enum TurtleOp {
     Ignore,
 }
 
-/// Stores state for the Stack (Push/Pop)
 #[derive(Clone, Copy, Debug)]
 pub struct StackFrame {
     pub state: TurtleState,
-    /// The index of the vertex ring at this point in the stack.
-    /// Allows branches to connect back to this point.
     pub ring_index: Option<u32>,
 }
 
 #[derive(Resource, Default)]
 pub struct TurtleRenderState {
-    // Metrics only - logic state is now local to the system function
     pub total_vertices: usize,
     pub generation_time_ms: f32,
 }
@@ -104,16 +100,12 @@ pub fn render_turtle(
     insert(sc.push, TurtleOp::Push);
     insert(sc.pop, TurtleOp::Pop);
 
-    // Setup Builder
     let mut builder = LSystemMeshBuilder::default();
     let mut state = TurtleState {
         width: sys.constants.get("width").map(|&w| w as f32).unwrap_or(0.1),
         ..default()
     };
     let mut stack: Vec<StackFrame> = Vec::with_capacity(64);
-
-    // We track the index of the "current" ring of vertices.
-    // If None, we haven't started a segment chain yet.
     let mut last_ring_idx: Option<u32> = None;
 
     let default_step = sys
@@ -128,7 +120,6 @@ pub fn render_turtle(
         .unwrap_or(config.default_angle)
         .to_radians();
 
-    // Loop through ALL modules at once (Fast enough for <500k modules)
     for i in 0..sys.state.len() {
         let view = match sys.state.get_view(i) {
             Some(v) => v,
@@ -143,29 +134,41 @@ pub fn render_turtle(
             TurtleOp::Draw => {
                 let len = get_val(default_step);
 
-                // 1. Ensure we have a start ring
                 if last_ring_idx.is_none() {
                     last_ring_idx = Some(builder.add_ring(state.transform, state.width / 2.0));
                 }
 
-                // 2. Move
                 state.transform.translation += state.transform.up() * len;
 
-                // 3. Create End Ring
+                // TROPISM / GRAVITY ADJUSTMENT
+                if let Some(t_vec) = config.tropism
+                    && config.elasticity > 0.0
+                {
+                    // In Bevy 0.17, transform.up() returns Dir3
+                    let head = state.transform.up();
+                    let h_cross_t = head.cross(t_vec); // Returns Vec3
+                    let mag = h_cross_t.length();
+
+                    if mag > 0.0001 {
+                        // FIX: Convert Vec3 to Dir3 using Dir3::new() which handles normalization
+                        if let Ok(axis) = Dir3::new(h_cross_t) {
+                            let angle = config.elasticity * mag;
+                            state.transform.rotate_axis(axis, angle);
+                        }
+                    }
+                }
+
                 let new_ring_idx = builder.add_ring(state.transform, state.width / 2.0);
 
-                // 4. Connect
                 if let Some(prev) = last_ring_idx {
                     builder.connect_rings(prev, new_ring_idx);
                 }
 
-                // 5. Advance
                 last_ring_idx = Some(new_ring_idx);
             }
             TurtleOp::Move => {
                 let len = get_val(default_step);
                 state.transform.translation += state.transform.up() * len;
-                // Move breaks the mesh continuity
                 last_ring_idx = None;
             }
             TurtleOp::Yaw(sign) => {
@@ -197,8 +200,6 @@ pub fn render_turtle(
                 state.width = get_val(state.width);
             }
             TurtleOp::Push => {
-                // Save current state AND the current ring index
-                // This allows the branch to attach to the current ring
                 stack.push(StackFrame {
                     state,
                     ring_index: last_ring_idx,
@@ -207,8 +208,6 @@ pub fn render_turtle(
             TurtleOp::Pop => {
                 if let Some(frame) = stack.pop() {
                     state = frame.state;
-                    // Restore the ring index.
-                    // This means the next Draw command will connect back to where we pushed.
                     last_ring_idx = frame.ring_index;
                 }
             }

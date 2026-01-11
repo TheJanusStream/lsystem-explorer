@@ -15,6 +15,10 @@ pub fn derive_l_system(
     // Reset status to Success initially
     status.error = None;
 
+    // Reset Config defaults (important so removing lines resets behavior)
+    config.tropism = None;
+    config.elasticity = 0.0;
+
     // Reset Engine
     let sys = &mut engine.0;
     *sys = System::new();
@@ -72,19 +76,26 @@ pub fn derive_l_system(
                             config.step_size = s;
                         }
                     }
+                    "elasticity" => {
+                        if let Ok(e) = parts[2].parse::<f32>() {
+                            config.elasticity = e;
+                        }
+                    }
+                    "tropism" => {
+                        if parts.len() >= 5 {
+                            let x = parts[2].parse().unwrap_or(0.0);
+                            let y = parts[3].parse().unwrap_or(-1.0);
+                            let z = parts[4].parse().unwrap_or(0.0);
+                            config.tropism = Some(Vec3::new(x, y, z));
+                        }
+                    }
                     _ => {}
                 }
             }
             continue;
         }
 
-        // Legacy/Simple syntax support
-        if trimmed.starts_with("angle:") {
-            if let Ok(a) = trimmed.trim_start_matches("angle:").trim().parse::<f32>() {
-                config.default_angle = a;
-            }
-            continue;
-        }
+        // ... (Legacy syntax support if needed) ...
 
         // Rules
         if let Err(e) = sys.add_rule(trimmed) {
@@ -93,20 +104,13 @@ pub fn derive_l_system(
         }
     }
 
-    // Check for constants defined via #define that map to config
-    if let Some(&angle) = sys.constants.get("angle") {
-        config.default_angle = angle as f32;
-    }
-    if let Some(&step) = sys.constants.get("step") {
-        config.step_size = step as f32;
-    }
+    // ... (Constants mapping if needed) ...
 
     if axiom_set {
         if let Err(e) = sys.derive(config.iterations) {
             status.error = Some(format!("Derivation error: {}", e));
         }
     } else {
-        // Warning if no axiom?
         status.error = Some("No axiom defined (start with 'omega: ...')".to_string());
     }
 }

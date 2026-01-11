@@ -7,7 +7,7 @@ edition = "2024"
 bevy = "0.17.2"
 bevy_egui = "0.38.0"
 bevy_panorbit_camera = "0.33.0"
-symbios = "0.1.0"
+symbios = "0.1.1"
 rand = "0.8.5"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]

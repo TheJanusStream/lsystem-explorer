@@ -8,6 +8,9 @@ pub struct LSystemConfig {
     pub iterations: usize,
     pub default_angle: f32,
     pub step_size: f32,
+    // New fields for Tropism/Gravity
+    pub tropism: Option<Vec3>,
+    pub elasticity: f32,
     pub recompile_requested: bool,
     pub auto_update: bool,
 }
@@ -19,18 +22,19 @@ impl Default for LSystemConfig {
 
         Self {
             source_code: default_preset.code.to_string(),
-            // These defaults will be immediately overwritten by the
-            // 'config: ...' directives in the source_code upon first run,
-            // but we set sane fallbacks here.
             iterations: 5,
             default_angle: 45.0,
             step_size: 0.5,
+            // Default to no tropism
+            tropism: None,
+            elasticity: 0.0,
             recompile_requested: true,
             auto_update: true,
         }
     }
 }
 
+// ... (Rest of file remains unchanged: LSystemEngine, DerivationStatus, DerivationDebounce) ...
 /// The persistent Symbios engine
 #[derive(Resource)]
 pub struct LSystemEngine(pub System);
