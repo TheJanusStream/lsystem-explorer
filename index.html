@@ -17,15 +17,33 @@
         canvas {
             display: block;
         }
+
+        #loading {
+            color: white;
+            font-family: monospace;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 24px;
+            pointer-events: none;
+        }
     </style>
 </head>
 
 <body>
+    <div id="loading">Loading...</div>
     <script type="module">
         import init from './lsystem-explorer.js';
         document.addEventListener('contextmenu', event => event.preventDefault());
         async function run() {
-            await init();
+            try {
+                await init();
+                document.getElementById('loading').style.display = 'none';
+            } catch (e) {
+                console.error("Failed to initialize:", e);
+                document.getElementById('loading').innerText = "Error: " + e;
+            }
         }
         run();
     </script>
