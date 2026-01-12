@@ -2,8 +2,8 @@ use crate::core::config::{LSystemConfig, LSystemEngine};
 use crate::visuals::assets::{SymbolCache, TurtleMaterialHandle};
 use crate::visuals::mesher::LSystemMeshBuilder;
 use bevy::platform::collections::HashMap;
+use bevy::platform::time::Instant;
 use bevy::prelude::*;
-use std::time::Instant;
 
 #[derive(Component)]
 pub struct LSystemMeshTag;
