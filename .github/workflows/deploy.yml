@@ -43,7 +43,7 @@ jobs:
                   wasm-bindgen --out-dir ./dist --target web \
                     --out-name lsystem-explorer \
                     --no-typescript \
-                    target/wasm32-unknown-unknown/release/lsystem_explorer.wasm
+                    target/wasm32-unknown-unknown/release/lsystem-explorer.wasm
 
             - name: Optimize WASM
               run: wasm-opt -Oz -o ./dist/lsystem-explorer_bg.wasm ./dist/lsystem-explorer_bg.wasm
