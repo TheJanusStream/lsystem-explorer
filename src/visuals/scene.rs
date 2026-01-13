@@ -1,3 +1,5 @@
+use std::f32::consts::TAU;
+
 use bevy::prelude::*;
 use bevy_panorbit_camera::PanOrbitCamera;
 
@@ -18,10 +20,12 @@ pub fn setup_scene(mut commands: Commands) {
 
     // Camera
     // Positioned to view the tree from a nice angle
-    // Target Y=50.0 approximates the mid-section of the first trunk segment (100 units)
     commands.spawn((
-        Transform::from_xyz(0.0, 80.0, 180.0).looking_at(Vec3::new(0.0, 50.0, 0.0), Vec3::Y),
         PanOrbitCamera {
+            focus: Vec3::new(0.0, 400.0, 0.0),
+            yaw: Some(TAU / 5.0),
+            pitch: Some(TAU / 64.0),
+            radius: Some(1200.0),
             button_orbit: MouseButton::Middle,
             button_pan: MouseButton::Right,
             ..default()

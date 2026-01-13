@@ -18,7 +18,7 @@ pub struct LSystemConfig {
 impl Default for LSystemConfig {
     fn default() -> Self {
         // Load the "Monopodial Tree" as the application default
-        let default_preset = &PRESETS[0];
+        let default_preset = &PRESETS[3];
 
         Self {
             source_code: default_preset.code.to_string(),
