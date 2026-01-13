@@ -1,6 +1,7 @@
 use crate::core::config::{LSystemConfig, LSystemEngine};
 use crate::visuals::assets::{SymbolCache, TurtleMaterialHandle};
 use crate::visuals::mesher::LSystemMeshBuilder;
+use crate::visuals::skeleton::{Skeleton, SkeletonPoint};
 use bevy::platform::collections::HashMap;
 use bevy::platform::time::Instant;
 use bevy::prelude::*;
@@ -41,7 +42,6 @@ pub enum TurtleOp {
 #[derive(Clone, Copy, Debug)]
 pub struct StackFrame {
     pub state: TurtleState,
-    pub ring_index: Option<u32>,
 }
 
 #[derive(Resource, Default)]
@@ -80,12 +80,12 @@ pub fn render_turtle(
     symbol_cache.refresh(&sys.interner);
     let mut op_map = HashMap::new();
     let sc = &*symbol_cache;
+
     let mut insert = |sym: Option<u16>, op: TurtleOp| {
         if let Some(s) = sym {
             op_map.insert(s, op);
         }
     };
-
     insert(sc.f_draw, TurtleOp::Draw);
     insert(sc.f_move, TurtleOp::Move);
     insert(sc.yaw_pos, TurtleOp::Yaw(1.0));
@@ -100,13 +100,15 @@ pub fn render_turtle(
     insert(sc.push, TurtleOp::Push);
     insert(sc.pop, TurtleOp::Pop);
 
-    let mut builder = LSystemMeshBuilder::default();
+    let mut skeleton = Skeleton::default();
+
+    let initial_width = sys.constants.get("width").map(|&w| w as f32).unwrap_or(0.1);
     let mut state = TurtleState {
-        width: sys.constants.get("width").map(|&w| w as f32).unwrap_or(0.1),
+        width: initial_width,
         ..default()
     };
+
     let mut stack: Vec<StackFrame> = Vec::with_capacity(64);
-    let mut last_ring_idx: Option<u32> = None;
 
     let default_step = sys
         .constants
@@ -134,42 +136,51 @@ pub fn render_turtle(
             TurtleOp::Draw => {
                 let len = get_val(default_step);
 
-                if last_ring_idx.is_none() {
-                    last_ring_idx = Some(builder.add_ring(state.transform, state.width / 2.0));
+                if skeleton.strands.is_empty() {
+                    skeleton.add_node(
+                        SkeletonPoint {
+                            position: state.transform.translation,
+                            rotation: state.transform.rotation,
+                            radius: state.width / 2.0,
+                        },
+                        true,
+                    );
                 }
 
                 state.transform.translation += state.transform.up() * len;
 
-                // TROPISM / GRAVITY ADJUSTMENT
                 if let Some(t_vec) = config.tropism
                     && config.elasticity > 0.0
                 {
-                    // In Bevy 0.17, transform.up() returns Dir3
                     let head = state.transform.up();
-                    let h_cross_t = head.cross(t_vec); // Returns Vec3
+                    let h_cross_t = head.cross(t_vec);
                     let mag = h_cross_t.length();
-
-                    if mag > 0.0001 {
-                        // FIX: Convert Vec3 to Dir3 using Dir3::new() which handles normalization
-                        if let Ok(axis) = Dir3::new(h_cross_t) {
-                            let angle = config.elasticity * mag;
-                            state.transform.rotate_axis(axis, angle);
-                        }
+                    if mag > 0.0001
+                        && let Ok(axis) = Dir3::new(h_cross_t)
+                    {
+                        let angle = config.elasticity * mag;
+                        state.transform.rotate_axis(axis, angle);
                     }
                 }
 
-                let new_ring_idx = builder.add_ring(state.transform, state.width / 2.0);
-
-                if let Some(prev) = last_ring_idx {
-                    builder.connect_rings(prev, new_ring_idx);
-                }
-
-                last_ring_idx = Some(new_ring_idx);
+                let current_point = SkeletonPoint {
+                    position: state.transform.translation,
+                    rotation: state.transform.rotation,
+                    radius: state.width / 2.0,
+                };
+                skeleton.add_node(current_point, false);
             }
             TurtleOp::Move => {
                 let len = get_val(default_step);
                 state.transform.translation += state.transform.up() * len;
-                last_ring_idx = None;
+                skeleton.add_node(
+                    SkeletonPoint {
+                        position: state.transform.translation,
+                        rotation: state.transform.rotation,
+                        radius: state.width / 2.0,
+                    },
+                    true,
+                );
             }
             TurtleOp::Yaw(sign) => {
                 let angle = get_val(default_angle.to_degrees()).to_radians() * sign;
@@ -200,22 +211,28 @@ pub fn render_turtle(
                 state.width = get_val(state.width);
             }
             TurtleOp::Push => {
-                stack.push(StackFrame {
-                    state,
-                    ring_index: last_ring_idx,
-                });
+                stack.push(StackFrame { state });
             }
             TurtleOp::Pop => {
                 if let Some(frame) = stack.pop() {
                     state = frame.state;
-                    last_ring_idx = frame.ring_index;
+                    skeleton.add_node(
+                        SkeletonPoint {
+                            position: state.transform.translation,
+                            rotation: state.transform.rotation,
+                            radius: state.width / 2.0,
+                        },
+                        true,
+                    );
                 }
             }
             TurtleOp::Ignore => {}
         }
     }
 
-    let final_mesh = builder.build();
+    let builder = LSystemMeshBuilder::default();
+    let final_mesh = builder.build(&skeleton);
+
     render_state.total_vertices = final_mesh.count_vertices();
     let mesh_handle = meshes.add(final_mesh);
 
