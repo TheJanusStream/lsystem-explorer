@@ -50,6 +50,24 @@ pub struct TurtleRenderState {
     pub generation_time_ms: f32,
 }
 
+pub fn sync_material_properties(
+    config: Res<LSystemConfig>,
+    mat_handle: Res<TurtleMaterialHandle>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+) {
+    if !config.is_changed() {
+        return;
+    }
+
+    if let Some(mat) = materials.get_mut(&mat_handle.0) {
+        mat.base_color = Color::srgb_from_array(config.material_color);
+        // Bevy uses LinearRgba for emissive
+        let emission_linear =
+            Color::srgb_from_array(config.emission_color).to_linear() * config.emission_strength;
+        mat.emissive = emission_linear;
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn render_turtle(
     mut commands: Commands,

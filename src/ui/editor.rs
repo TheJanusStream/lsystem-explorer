@@ -25,7 +25,7 @@ pub fn ui_system(
         egui::Window::new("Symbios Lab")
             .default_width(350.0)
             .show(ctx, |ui| {
-                // ... (Presets UI same as before) ...
+                // ... (Presets UI) ...
                 egui::containers::Sides::new().show(
                     ui,
                     |ui| {
@@ -49,7 +49,8 @@ pub fn ui_system(
                 ui.add_space(5.0);
 
                 egui::ScrollArea::vertical()
-                    .min_scrolled_height(300.0)
+                    .min_scrolled_height(200.0)
+                    .id_salt("source_scroll")
                     .show(ui, |ui| {
                         let response = ui.add(
                             egui::TextEdit::multiline(&mut config.source_code)
@@ -63,6 +64,26 @@ pub fn ui_system(
                             debounce.pending = true;
                         }
                     });
+
+                ui.add_space(5.0);
+
+                // Material UI
+                ui.separator();
+                ui.collapsing("Material Settings", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Base Color:");
+                        ui.color_edit_button_rgb(&mut config.material_color);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Emission:");
+                        ui.color_edit_button_rgb(&mut config.emission_color);
+                    });
+                    ui.add(
+                        egui::Slider::new(&mut config.emission_strength, 0.0..=10.0)
+                            .text("Glow Strength"),
+                    );
+                });
+                ui.separator();
 
                 ui.add_space(5.0);
 

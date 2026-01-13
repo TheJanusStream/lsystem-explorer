@@ -48,6 +48,7 @@ fn main() {
             (
                 logic::derivation::derive_l_system,
                 visuals::turtle::render_turtle,
+                visuals::turtle::sync_material_properties, // Added Material Sync
             )
                 .chain(),
         )

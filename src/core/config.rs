@@ -11,6 +11,12 @@ pub struct LSystemConfig {
     // New fields for Tropism/Gravity
     pub tropism: Option<Vec3>,
     pub elasticity: f32,
+
+    // Material Configuration
+    pub material_color: [f32; 3],
+    pub emission_color: [f32; 3],
+    pub emission_strength: f32,
+
     pub recompile_requested: bool,
     pub auto_update: bool,
 }
@@ -28,13 +34,19 @@ impl Default for LSystemConfig {
             // Default to no tropism
             tropism: None,
             elasticity: 0.0,
+
+            // Material Defaults
+            material_color: [0.2, 0.8, 0.2], // Greenish
+            emission_color: [0.5, 1.0, 0.5],
+            emission_strength: 0.0, // Start non-emissive to show off lighting
+
             recompile_requested: true,
             auto_update: true,
         }
     }
 }
 
-// ... (Rest of file remains unchanged: LSystemEngine, DerivationStatus, DerivationDebounce) ...
+// ... (Rest of file remains unchanged) ...
 /// The persistent Symbios engine
 #[derive(Resource)]
 pub struct LSystemEngine(pub System);
