@@ -8,11 +8,11 @@ pub struct LSystemConfig {
     pub iterations: usize,
     pub default_angle: f32,
     pub step_size: f32,
-    // New fields for Tropism/Gravity
+    pub default_width: f32,
+
     pub tropism: Option<Vec3>,
     pub elasticity: f32,
 
-    // Material Configuration
     pub material_color: [f32; 3],
     pub emission_color: [f32; 3],
     pub emission_strength: f32,
@@ -23,7 +23,6 @@ pub struct LSystemConfig {
 
 impl Default for LSystemConfig {
     fn default() -> Self {
-        // Load the "Monopodial Tree" as the application default
         let default_preset = &PRESETS[3];
 
         Self {
@@ -31,14 +30,14 @@ impl Default for LSystemConfig {
             iterations: 5,
             default_angle: 45.0,
             step_size: 0.5,
-            // Default to no tropism
+            default_width: 0.1,
+
             tropism: None,
             elasticity: 0.0,
 
-            // Material Defaults
-            material_color: [0.2, 0.8, 0.2], // Greenish
+            material_color: [0.2, 0.8, 0.2],
             emission_color: [0.5, 1.0, 0.5],
-            emission_strength: 0.0, // Start non-emissive to show off lighting
+            emission_strength: 0.0,
 
             recompile_requested: true,
             auto_update: true,
@@ -48,10 +47,9 @@ impl Default for LSystemConfig {
 
 #[derive(Resource, Default)]
 pub struct LSystemAnalysis {
-    /// True if the grammar uses 'F' or 'f' without explicit parameters.
     pub uses_implicit_step: bool,
-    /// True if the grammar uses rotation symbols (+, -, &, ^, /, \) without explicit parameters.
     pub uses_implicit_angle: bool,
+    pub uses_explicit_width: bool,
 }
 
 /// The persistent Symbios engine

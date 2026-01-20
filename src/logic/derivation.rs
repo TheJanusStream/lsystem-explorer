@@ -17,6 +17,7 @@ pub fn derive_l_system(
 
     analysis.uses_implicit_step = false;
     analysis.uses_implicit_angle = false;
+    analysis.uses_explicit_width = false;
 
     let sys = &mut engine.0;
     *sys = System::new();
@@ -28,6 +29,10 @@ pub fn derive_l_system(
     let mut check_module = |symbol: &str, param_count: usize| {
         let step_syms = ["F", "f"];
         let turn_syms = ["+", "-", "&", "^", "/", "\\", "|"];
+
+        if symbol == "!" {
+            analysis.uses_explicit_width = true;
+        }
 
         if param_count == 0 {
             if step_syms.contains(&symbol) {

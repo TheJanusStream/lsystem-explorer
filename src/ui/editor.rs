@@ -40,6 +40,7 @@ pub fn ui_system(
                                         config.iterations = preset.iterations;
                                         config.default_angle = preset.angle;
                                         config.step_size = preset.step;
+                                        config.default_width = preset.width;
                                         config.elasticity = preset.elasticity;
                                         config.tropism = preset.tropism;
                                         config.recompile_requested = true;
@@ -75,7 +76,10 @@ pub fn ui_system(
                 // --- DYNAMIC PARAMETERS ---
                 ui.heading("Interpretation:");
 
-                if analysis.uses_implicit_step || analysis.uses_implicit_angle {
+                if analysis.uses_implicit_step
+                    || analysis.uses_implicit_angle
+                    || !analysis.uses_explicit_width
+                {
                     ui.horizontal(|ui| {
                         if analysis.uses_implicit_step {
                             ui.label("Step:");
@@ -103,13 +107,20 @@ pub fn ui_system(
                                 config.recompile_requested = true;
                             }
                         }
+                        if !analysis.uses_explicit_width {
+                            ui.label("Width:");
+                            if ui
+                                .add(
+                                    egui::DragValue::new(&mut config.default_width)
+                                        .speed(0.01)
+                                        .range(0.001..=10.0),
+                                )
+                                .changed()
+                            {
+                                config.recompile_requested = true;
+                            }
+                        }
                     });
-                } else {
-                    ui.label(
-                        egui::RichText::new("Fully Parametric System (No Defaults Needed)")
-                            .small()
-                            .italics(),
-                    );
                 }
 
                 ui.horizontal(|ui| {

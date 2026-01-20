@@ -81,7 +81,12 @@ pub fn render_turtle(
         .unwrap_or(config.default_angle)
         .to_radians();
 
-    let initial_width = sys.constants.get("width").map(|&w| w as f32).unwrap_or(0.1);
+    let initial_width = sys
+        .constants
+        .get("width")
+        .map(|&w| w as f32)
+        .unwrap_or(config.default_width);
+
     let tropism_compat = config.tropism;
 
     let turtle_config = TurtleConfig {
