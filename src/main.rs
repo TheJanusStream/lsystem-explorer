@@ -9,7 +9,7 @@ mod visuals;
 
 use core::config::{DerivationDebounce, DerivationStatus, LSystemConfig, LSystemEngine};
 
-use crate::visuals::turtle::TurtleRenderState;
+use crate::{core::config::LSystemAnalysis, visuals::turtle::TurtleRenderState};
 
 fn main() {
     App::new()
@@ -31,6 +31,7 @@ fn main() {
         .init_resource::<LSystemEngine>()
         .init_resource::<DerivationStatus>()
         .init_resource::<DerivationDebounce>()
+        .init_resource::<LSystemAnalysis>()
         .init_resource::<TurtleRenderState>()
         // Startup
         .add_systems(

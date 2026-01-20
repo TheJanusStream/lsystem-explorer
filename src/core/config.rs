@@ -46,7 +46,14 @@ impl Default for LSystemConfig {
     }
 }
 
-// ... (Rest of file remains unchanged) ...
+#[derive(Resource, Default)]
+pub struct LSystemAnalysis {
+    /// True if the grammar uses 'F' or 'f' without explicit parameters.
+    pub uses_implicit_step: bool,
+    /// True if the grammar uses rotation symbols (+, -, &, ^, /, \) without explicit parameters.
+    pub uses_implicit_angle: bool,
+}
+
 /// The persistent Symbios engine
 #[derive(Resource)]
 pub struct LSystemEngine(pub System);

@@ -1,6 +1,6 @@
-use crate::core::config::{DerivationDebounce, DerivationStatus, LSystemConfig};
+use crate::core::config::{DerivationDebounce, DerivationStatus, LSystemAnalysis, LSystemConfig};
 use crate::core::presets::PRESETS;
-use crate::visuals::turtle::TurtleRenderState; // Import RenderState
+use crate::visuals::turtle::TurtleRenderState;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
@@ -9,10 +9,10 @@ pub fn ui_system(
     mut config: ResMut<LSystemConfig>,
     mut debounce: ResMut<DerivationDebounce>,
     status: Res<DerivationStatus>,
-    render_state: Res<TurtleRenderState>, // Add this resource
+    analysis: Res<LSystemAnalysis>,
+    render_state: Res<TurtleRenderState>,
     time: Res<Time>,
 ) {
-    // Tick debounce timer
     if debounce.pending {
         debounce.timer.tick(time.delta());
         if debounce.timer.is_finished() {
@@ -25,7 +25,6 @@ pub fn ui_system(
         egui::Window::new("Symbios Lab")
             .default_width(350.0)
             .show(ctx, |ui| {
-                // ... (Presets UI) ...
                 egui::containers::Sides::new().show(
                     ui,
                     |ui| {
@@ -38,6 +37,11 @@ pub fn ui_system(
                                 for preset in PRESETS {
                                     if ui.selectable_label(false, preset.name).clicked() {
                                         config.source_code = preset.code.to_string();
+                                        config.iterations = preset.iterations;
+                                        config.default_angle = preset.angle;
+                                        config.step_size = preset.step;
+                                        config.elasticity = preset.elasticity;
+                                        config.tropism = preset.tropism;
                                         config.recompile_requested = true;
                                         debounce.pending = false;
                                     }
@@ -48,6 +52,7 @@ pub fn ui_system(
 
                 ui.add_space(5.0);
 
+                // Editor
                 egui::ScrollArea::vertical()
                     .min_scrolled_height(200.0)
                     .id_salt("source_scroll")
@@ -58,7 +63,6 @@ pub fn ui_system(
                                 .code_editor()
                                 .desired_width(f32::INFINITY),
                         );
-
                         if response.changed() && config.auto_update {
                             debounce.timer.reset();
                             debounce.pending = true;
@@ -66,53 +70,48 @@ pub fn ui_system(
                     });
 
                 ui.add_space(5.0);
-
-                // Material UI
-                ui.separator();
-                ui.collapsing("Material Settings", |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Base Color:");
-                        ui.color_edit_button_rgb(&mut config.material_color);
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Emission:");
-                        ui.color_edit_button_rgb(&mut config.emission_color);
-                    });
-                    ui.add(
-                        egui::Slider::new(&mut config.emission_strength, 0.0..=10.0)
-                            .text("Glow Strength"),
-                    );
-                });
                 ui.separator();
 
-                ui.add_space(5.0);
+                // --- DYNAMIC PARAMETERS ---
+                ui.heading("Interpretation:");
 
-                // Status Indicator
-                if let Some(err) = &status.error {
-                    ui.group(|ui| {
-                        ui.colored_label(egui::Color32::RED, "❌ Parse Error:");
-                        ui.label(
-                            egui::RichText::new(err)
-                                .color(egui::Color32::from_rgb(255, 100, 100))
-                                .small(),
-                        );
+                if analysis.uses_implicit_step || analysis.uses_implicit_angle {
+                    ui.horizontal(|ui| {
+                        if analysis.uses_implicit_step {
+                            ui.label("Step:");
+                            if ui
+                                .add(
+                                    egui::DragValue::new(&mut config.step_size)
+                                        .speed(0.1)
+                                        .range(0.1..=100.0),
+                                )
+                                .changed()
+                            {
+                                config.recompile_requested = true;
+                            }
+                        }
+                        if analysis.uses_implicit_angle {
+                            ui.label("Angle:");
+                            if ui
+                                .add(
+                                    egui::DragValue::new(&mut config.default_angle)
+                                        .speed(1.0)
+                                        .range(0.0..=180.0),
+                                )
+                                .changed()
+                            {
+                                config.recompile_requested = true;
+                            }
+                        }
                     });
-                } else if debounce.pending {
-                    ui.colored_label(egui::Color32::YELLOW, "⏳ Typing...");
                 } else {
-                    ui.vertical(|ui| {
-                        ui.colored_label(egui::Color32::GREEN, "✅ Mesh Ready");
-                        ui.label(format!("Vertices: {}", render_state.total_vertices));
-                        ui.label(format!(
-                            "Gen Time: {:.2}ms",
-                            render_state.generation_time_ms
-                        ));
-                    });
+                    ui.label(
+                        egui::RichText::new("Fully Parametric System (No Defaults Needed)")
+                            .small()
+                            .italics(),
+                    );
                 }
 
-                ui.add_space(5.0);
-
-                // Iterations
                 ui.horizontal(|ui| {
                     ui.label("Iterations:");
                     if ui.button("➖").clicked() && config.iterations > 0 {
@@ -132,9 +131,88 @@ pub fn ui_system(
                     }
                 });
 
-                ui.add_space(5.0);
-                ui.checkbox(&mut config.auto_update, "Live Update");
+                ui.collapsing("Physics & Tropism", |ui| {
+                    if ui
+                        .add(
+                            egui::Slider::new(&mut config.elasticity, 0.0..=1.0).text("Elasticity"),
+                        )
+                        .changed()
+                    {
+                        config.recompile_requested = true;
+                    }
 
+                    let mut tropism_active = config.tropism.is_some();
+                    if ui.checkbox(&mut tropism_active, "Enable Tropism").changed() {
+                        if tropism_active {
+                            config.tropism = Some(Vec3::NEG_Y);
+                        } else {
+                            config.tropism = None;
+                        }
+                        config.recompile_requested = true;
+                    }
+
+                    let mut tropism_changed = false;
+                    if let Some(t) = &mut config.tropism {
+                        ui.horizontal(|ui| {
+                            ui.label("Vec:");
+                            if ui.add(egui::DragValue::new(&mut t.x).speed(0.1)).changed() {
+                                tropism_changed = true;
+                            }
+                            if ui.add(egui::DragValue::new(&mut t.y).speed(0.1)).changed() {
+                                tropism_changed = true;
+                            }
+                            if ui.add(egui::DragValue::new(&mut t.z).speed(0.1)).changed() {
+                                tropism_changed = true;
+                            }
+                        });
+                    }
+                    if tropism_changed {
+                        config.recompile_requested = true;
+                    }
+                });
+
+                ui.add_space(5.0);
+                ui.separator();
+
+                ui.collapsing("Material Settings", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Base Color:");
+                        ui.color_edit_button_rgb(&mut config.material_color);
+                    });
+                    ui.horizontal(|ui| {
+                        ui.label("Emission:");
+                        ui.color_edit_button_rgb(&mut config.emission_color);
+                    });
+                    ui.add(
+                        egui::Slider::new(&mut config.emission_strength, 0.0..=10.0)
+                            .text("Glow Strength"),
+                    );
+                });
+
+                ui.add_space(5.0);
+
+                if let Some(err) = &status.error {
+                    ui.group(|ui| {
+                        ui.colored_label(egui::Color32::RED, "❌ Parse Error:");
+                        ui.label(
+                            egui::RichText::new(err)
+                                .color(egui::Color32::from_rgb(255, 100, 100))
+                                .small(),
+                        );
+                    });
+                } else if debounce.pending {
+                    ui.colored_label(egui::Color32::YELLOW, "⏳ Typing...");
+                } else {
+                    ui.horizontal(|ui| {
+                        ui.colored_label(egui::Color32::GREEN, "✅ Mesh Ready");
+                        ui.label(format!(
+                            "| {} Verts | {:.2}ms",
+                            render_state.total_vertices, render_state.generation_time_ms
+                        ));
+                    });
+                }
+
+                ui.checkbox(&mut config.auto_update, "Live Update");
                 if !config.auto_update && ui.button("▶ Run / Recompile").clicked() {
                     config.recompile_requested = true;
                     debounce.pending = false;

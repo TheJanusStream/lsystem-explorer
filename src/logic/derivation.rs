@@ -1,4 +1,4 @@
-use crate::core::config::{DerivationStatus, LSystemConfig, LSystemEngine};
+use crate::core::config::{DerivationStatus, LSystemAnalysis, LSystemConfig, LSystemEngine};
 use bevy::prelude::*;
 use symbios::System;
 
@@ -6,27 +6,37 @@ pub fn derive_l_system(
     mut config: ResMut<LSystemConfig>,
     mut engine: ResMut<LSystemEngine>,
     mut status: ResMut<DerivationStatus>,
+    mut analysis: ResMut<LSystemAnalysis>,
 ) {
     if !config.recompile_requested {
         return;
     }
     config.recompile_requested = false;
 
-    // Reset status to Success initially
     status.error = None;
 
-    // Reset Config defaults (important so removing lines resets behavior)
-    config.tropism = None;
-    config.elasticity = 0.0;
+    analysis.uses_implicit_step = false;
+    analysis.uses_implicit_angle = false;
 
-    // Reset Engine
     let sys = &mut engine.0;
     *sys = System::new();
 
-    // Clone source to avoid immutable borrow of 'config' preventing mutation later
     let source = config.source_code.clone();
     let lines: Vec<&str> = source.lines().collect();
     let mut axiom_set = false;
+
+    let mut check_module = |symbol: &str, param_count: usize| {
+        let step_syms = ["F", "f"];
+        let turn_syms = ["+", "-", "&", "^", "/", "\\", "|"];
+
+        if param_count == 0 {
+            if step_syms.contains(&symbol) {
+                analysis.uses_implicit_step = true;
+            } else if turn_syms.contains(&symbol) {
+                analysis.uses_implicit_angle = true;
+            }
+        }
+    };
 
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
@@ -36,8 +46,7 @@ pub fn derive_l_system(
             continue;
         }
 
-        // Directives
-        if trimmed.starts_with("#define") || trimmed.starts_with("#ignore") {
+        if trimmed.starts_with("#") {
             if let Err(e) = sys.add_directive(trimmed) {
                 status.error = Some(format!("Line {}: {}", line_num, e));
                 return;
@@ -45,10 +54,20 @@ pub fn derive_l_system(
             continue;
         }
 
-        // Axiom
         if trimmed.starts_with("omega:") {
-            let axiom = trimmed.trim_start_matches("omega:").trim();
-            if let Err(e) = sys.set_axiom(axiom) {
+            let axiom_src = trimmed.trim_start_matches("omega:").trim();
+
+            let mut remaining = axiom_src;
+            while !remaining.is_empty() {
+                if let Ok((rest, module)) = symbios::parser::parse_module(remaining) {
+                    check_module(&module.symbol, module.params.len());
+                    remaining = rest.trim();
+                } else {
+                    break;
+                }
+            }
+
+            if let Err(e) = sys.set_axiom(axiom_src) {
                 status.error = Some(format!("Line {}: Axiom error: {}", line_num, e));
                 return;
             }
@@ -56,61 +75,29 @@ pub fn derive_l_system(
             continue;
         }
 
-        // CONFIG OVERRIDES: "config: key value"
-        if trimmed.starts_with("config:") {
-            let parts: Vec<&str> = trimmed.split_whitespace().collect();
-            if parts.len() >= 3 {
-                match parts[1] {
-                    "iterations" => {
-                        if let Ok(i) = parts[2].parse::<usize>() {
-                            config.iterations = i;
-                        }
-                    }
-                    "angle" => {
-                        if let Ok(a) = parts[2].parse::<f32>() {
-                            config.default_angle = a;
-                        }
-                    }
-                    "step" => {
-                        if let Ok(s) = parts[2].parse::<f32>() {
-                            config.step_size = s;
-                        }
-                    }
-                    "elasticity" => {
-                        if let Ok(e) = parts[2].parse::<f32>() {
-                            config.elasticity = e;
-                        }
-                    }
-                    "tropism" => {
-                        if parts.len() >= 5 {
-                            let x = parts[2].parse().unwrap_or(0.0);
-                            let y = parts[3].parse().unwrap_or(-1.0);
-                            let z = parts[4].parse().unwrap_or(0.0);
-                            config.tropism = Some(Vec3::new(x, y, z));
-                        }
-                    }
-                    _ => {}
+        match symbios::parser::parse_rule(trimmed) {
+            Ok((_, rule_ast)) => {
+                for succ in &rule_ast.successors {
+                    check_module(&succ.symbol, succ.params.len());
+                }
+
+                if let Err(e) = sys.add_rule(trimmed) {
+                    status.error = Some(format!("Line {}: Rule error: {}", line_num, e));
+                    return;
                 }
             }
-            continue;
-        }
-
-        // ... (Legacy syntax support if needed) ...
-
-        // Rules
-        if let Err(e) = sys.add_rule(trimmed) {
-            status.error = Some(format!("Line {}: Rule error: {}", line_num, e));
-            return;
+            Err(e) => {
+                status.error = Some(format!("Line {}: Parse error: {}", line_num, e));
+                return;
+            }
         }
     }
-
-    // ... (Constants mapping if needed) ...
 
     if axiom_set {
         if let Err(e) = sys.derive(config.iterations) {
             status.error = Some(format!("Derivation error: {}", e));
         }
     } else {
-        status.error = Some("No axiom defined (start with 'omega: ...')".to_string());
+        status.error = Some("No axiom defined".to_string());
     }
 }

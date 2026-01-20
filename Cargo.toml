@@ -1,14 +1,14 @@
 [package]
 name = "lsystem-explorer"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 
 [dependencies]
 bevy = "0.17.2"
 bevy_egui = "0.38.0"
 bevy_panorbit_camera = "0.33.0"
-symbios = "0.1.1"
-symbios-turtle-3d = { path = "../symbios-turtle-3d", version = "0.1.0" }
+symbios = { path = "../symbios", version = "0.1.2" }
+symbios-turtle-3d = { path = "../symbios-turtle-3d", version = "0.1.1" }
 bevy_symbios = { path = "../bevy_symbios", version = "0.1.0" }
 rand = "0.8.5"
 
