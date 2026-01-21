@@ -1,4 +1,6 @@
-use crate::core::config::{DerivationDebounce, DerivationStatus, LSystemAnalysis, LSystemConfig};
+use crate::core::config::{
+    DerivationDebounce, DerivationStatus, LSystemAnalysis, LSystemConfig, LSystemEngine,
+};
 use crate::core::presets::PRESETS;
 use crate::visuals::turtle::TurtleRenderState;
 use bevy::prelude::*;
@@ -7,12 +9,14 @@ use bevy_egui::{EguiContexts, egui};
 pub fn ui_system(
     mut contexts: EguiContexts,
     mut config: ResMut<LSystemConfig>,
+    engine: ResMut<LSystemEngine>,
     mut debounce: ResMut<DerivationDebounce>,
     status: Res<DerivationStatus>,
     analysis: Res<LSystemAnalysis>,
     render_state: Res<TurtleRenderState>,
     time: Res<Time>,
 ) {
+    // Handle Debounce
     if debounce.pending {
         debounce.timer.tick(time.delta());
         if debounce.timer.is_finished() {
@@ -25,6 +29,7 @@ pub fn ui_system(
         egui::Window::new("Symbios Lab")
             .default_width(350.0)
             .show(ctx, |ui| {
+                // --- PRESETS ---
                 egui::containers::Sides::new().show(
                     ui,
                     |ui| {
@@ -53,7 +58,7 @@ pub fn ui_system(
 
                 ui.add_space(5.0);
 
-                // Editor
+                // --- EDITOR ---
                 egui::ScrollArea::vertical()
                     .min_scrolled_height(200.0)
                     .id_salt("source_scroll")
@@ -73,7 +78,53 @@ pub fn ui_system(
                 ui.add_space(5.0);
                 ui.separator();
 
-                // --- DYNAMIC PARAMETERS ---
+                // --- DEFINED CONSTANTS ---
+                let sys = &engine.0;
+                if !sys.constants.is_empty() {
+                    ui.heading("Defined Constants:");
+
+                    let mut keys: Vec<String> = sys.constants.keys().cloned().collect();
+                    keys.sort();
+
+                    let mut constants_changed = false;
+
+                    egui::Grid::new("constants_grid")
+                        .num_columns(2)
+                        .striped(true)
+                        .show(ui, |ui| {
+                            for key in keys {
+                                if let Some(&current_val) = sys.constants.get(&key) {
+                                    ui.label(format!("{}:", key));
+
+                                    let mut val_f32 = current_val as f32;
+
+                                    if ui
+                                        .add(egui::DragValue::new(&mut val_f32).speed(0.1))
+                                        .changed()
+                                    {
+                                        let new_source = update_define_in_source(
+                                            &config.source_code,
+                                            &key,
+                                            val_f32,
+                                        );
+                                        config.source_code = new_source;
+                                        constants_changed = true;
+                                    }
+                                    ui.end_row();
+                                }
+                            }
+                        });
+
+                    if constants_changed {
+                        config.recompile_requested = true;
+                        debounce.pending = false;
+                    }
+
+                    ui.add_space(5.0);
+                    ui.separator();
+                }
+
+                // --- INTERPRETATION SETTINGS ---
                 ui.heading("Interpretation:");
 
                 if analysis.uses_implicit_step
@@ -154,29 +205,28 @@ pub fn ui_system(
 
                     let mut tropism_active = config.tropism.is_some();
                     if ui.checkbox(&mut tropism_active, "Enable Tropism").changed() {
-                        if tropism_active {
-                            config.tropism = Some(Vec3::NEG_Y);
+                        config.tropism = if tropism_active {
+                            Some(Vec3::NEG_Y)
                         } else {
-                            config.tropism = None;
-                        }
+                            None
+                        };
                         config.recompile_requested = true;
                     }
 
+                    // FIX: Track changes in a boolean to avoid holding mutable borrow of `config`
                     let mut tropism_changed = false;
                     if let Some(t) = &mut config.tropism {
                         ui.horizontal(|ui| {
                             ui.label("Vec:");
-                            if ui.add(egui::DragValue::new(&mut t.x).speed(0.1)).changed() {
-                                tropism_changed = true;
-                            }
-                            if ui.add(egui::DragValue::new(&mut t.y).speed(0.1)).changed() {
-                                tropism_changed = true;
-                            }
-                            if ui.add(egui::DragValue::new(&mut t.z).speed(0.1)).changed() {
-                                tropism_changed = true;
-                            }
+                            tropism_changed |=
+                                ui.add(egui::DragValue::new(&mut t.x).speed(0.1)).changed();
+                            tropism_changed |=
+                                ui.add(egui::DragValue::new(&mut t.y).speed(0.1)).changed();
+                            tropism_changed |=
+                                ui.add(egui::DragValue::new(&mut t.z).speed(0.1)).changed();
                         });
                     }
+                    // Apply change after borrow ends
                     if tropism_changed {
                         config.recompile_requested = true;
                     }
@@ -202,6 +252,7 @@ pub fn ui_system(
 
                 ui.add_space(5.0);
 
+                // --- STATUS ---
                 if let Some(err) = &status.error {
                     ui.group(|ui| {
                         ui.colored_label(egui::Color32::RED, "❌ Parse Error:");
@@ -230,4 +281,25 @@ pub fn ui_system(
                 }
             });
     }
+}
+
+/// Helper to update a #define value in the source string.
+fn update_define_in_source(source: &str, key: &str, new_value: f32) -> String {
+    let mut new_lines = Vec::new();
+
+    for line in source.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("#define") {
+            let parts: Vec<&str> = trimmed.split_whitespace().collect();
+            // Expected parts: ["#define", "KEY", "VALUE", ...]
+            if parts.len() >= 2 && parts[1] == key {
+                // Reconstruct the line
+                new_lines.push(format!("#define {} {}", key, new_value));
+                continue;
+            }
+        }
+        new_lines.push(line.to_string());
+    }
+
+    new_lines.join("\n")
 }
