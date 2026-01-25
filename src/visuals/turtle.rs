@@ -1,7 +1,7 @@
 use crate::core::config::{
-    LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType,
+    LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType, TextureType,
 };
-use crate::visuals::assets::{MaterialPalette, PropMeshAssets};
+use crate::visuals::assets::{MaterialPalette, ProceduralTextures, PropMeshAssets};
 use bevy::platform::time::Instant;
 use bevy::prelude::*;
 use bevy_symbios::LSystemMeshBuilder;
@@ -23,6 +23,7 @@ pub struct TurtleRenderState {
 pub fn sync_material_properties(
     material_settings: Res<MaterialSettingsMap>,
     palette: Res<MaterialPalette>,
+    proc_textures: Res<ProceduralTextures>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if !material_settings.is_changed() {
@@ -40,10 +41,17 @@ pub fn sync_material_properties(
 
         mat.base_color = Color::srgb_from_array(settings.base_color);
         mat.perceptual_roughness = settings.roughness;
+        mat.metallic = settings.metallic;
 
         let emission_linear = Color::srgb_from_array(settings.emission_color).to_linear()
             * settings.emission_strength;
         mat.emissive = emission_linear;
+
+        // Apply texture based on TextureType
+        mat.base_color_texture = match settings.texture {
+            TextureType::None => None,
+            other => proc_textures.textures.get(&other).cloned(),
+        };
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::core::config::{
     DerivationDebounce, DerivationStatus, ExportConfig, LSystemAnalysis, LSystemConfig,
-    LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType,
+    LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType, TextureType,
 };
 use crate::core::presets::PRESETS;
 use crate::visuals::turtle::TurtleRenderState;
@@ -245,37 +245,98 @@ pub fn ui_system(
                     let material_names = ["Mat 0 (Primary)", "Mat 1 (Energy)", "Mat 2 (Matte)"];
 
                     for mat_id in 0u8..3 {
-                        if let Some(settings) = material_settings.settings.get_mut(&mat_id) {
-                            ui.collapsing(material_names[mat_id as usize], |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.label("Base Color:");
-                                    ui.color_edit_button_rgb(&mut settings.base_color);
-                                });
-                                ui.horizontal(|ui| {
-                                    ui.label("Emission:");
-                                    ui.color_edit_button_rgb(&mut settings.emission_color);
-                                });
-                                ui.add(
-                                    egui::Slider::new(&mut settings.emission_strength, 0.0..=10.0)
-                                        .text("Glow"),
-                                );
-                                ui.add(
-                                    egui::Slider::new(&mut settings.roughness, 0.0..=1.0)
-                                        .text("Roughness"),
-                                );
+                        // Read current values into locals
+                        let Some(current) = material_settings.settings.get(&mat_id).cloned() else {
+                            continue;
+                        };
+
+                        let mut local_base_color = current.base_color;
+                        let mut local_emission_color = current.emission_color;
+                        let mut local_emission_strength = current.emission_strength;
+                        let mut local_roughness = current.roughness;
+                        let mut local_metallic = current.metallic;
+                        let mut local_texture = current.texture;
+
+                        let mut mat_changed = false;
+
+                        ui.collapsing(material_names[mat_id as usize], |ui| {
+                            ui.horizontal(|ui| {
+                                ui.label("Base Color:");
+                                mat_changed |=
+                                    ui.color_edit_button_rgb(&mut local_base_color).changed();
                             });
+                            ui.horizontal(|ui| {
+                                ui.label("Emission:");
+                                mat_changed |= ui
+                                    .color_edit_button_rgb(&mut local_emission_color)
+                                    .changed();
+                            });
+                            mat_changed |= ui
+                                .add(
+                                    egui::Slider::new(&mut local_emission_strength, 0.0..=10.0)
+                                        .text("Glow"),
+                                )
+                                .changed();
+                            mat_changed |= ui
+                                .add(
+                                    egui::Slider::new(&mut local_roughness, 0.0..=1.0)
+                                        .text("Roughness"),
+                                )
+                                .changed();
+                            mat_changed |= ui
+                                .add(
+                                    egui::Slider::new(&mut local_metallic, 0.0..=1.0)
+                                        .text("Metallic"),
+                                )
+                                .changed();
+
+                            ui.horizontal(|ui| {
+                                ui.label("Texture:");
+                                egui::ComboBox::from_id_salt(format!("mat_tex_{}", mat_id))
+                                    .selected_text(local_texture.name())
+                                    .show_ui(ui, |ui| {
+                                        for tex_type in TextureType::ALL {
+                                            if ui
+                                                .selectable_label(
+                                                    local_texture == *tex_type,
+                                                    tex_type.name(),
+                                                )
+                                                .clicked()
+                                            {
+                                                local_texture = *tex_type;
+                                                mat_changed = true;
+                                            }
+                                        }
+                                    });
+                            });
+                        });
+
+                        // Only write back if changed
+                        if mat_changed
+                            && let Some(settings) = material_settings.settings.get_mut(&mat_id)
+                        {
+                            settings.base_color = local_base_color;
+                            settings.emission_color = local_emission_color;
+                            settings.emission_strength = local_emission_strength;
+                            settings.roughness = local_roughness;
+                            settings.metallic = local_metallic;
+                            settings.texture = local_texture;
                         }
                     }
                 });
 
                 ui.collapsing("Prop Settings", |ui| {
-                    ui.add(
-                        egui::Slider::new(&mut prop_config.prop_scale, 0.1..=5.0)
-                            .text("Prop Scale"),
-                    );
+                    // Read current values into locals to avoid marking resource as changed
+                    let mut local_prop_scale = prop_config.prop_scale;
+                    let scale_changed = ui
+                        .add(egui::Slider::new(&mut local_prop_scale, 0.1..=5.0).text("Prop Scale"))
+                        .changed();
 
                     ui.separator();
                     ui.label("Surface ID Mappings:");
+
+                    // Track mesh mapping changes
+                    let mut mesh_changes: Vec<(u16, PropMeshType)> = Vec::new();
 
                     // Show mappings for surface IDs 0-3
                     for surface_id in 0u16..4 {
@@ -299,13 +360,19 @@ pub fn ui_system(
                                             )
                                             .clicked()
                                         {
-                                            prop_config
-                                                .surface_meshes
-                                                .insert(surface_id, *mesh_type);
+                                            mesh_changes.push((surface_id, *mesh_type));
                                         }
                                     }
                                 });
                         });
+                    }
+
+                    // Only mutate prop_config if something actually changed
+                    if scale_changed {
+                        prop_config.prop_scale = local_prop_scale;
+                    }
+                    for (surface_id, mesh_type) in mesh_changes {
+                        prop_config.surface_meshes.insert(surface_id, mesh_type);
                     }
                 });
 

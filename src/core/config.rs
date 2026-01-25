@@ -3,6 +3,34 @@ use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use symbios::System;
 
+/// Available procedural texture types for materials
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum TextureType {
+    #[default]
+    None,
+    Grid,
+    Noise,
+    Checker,
+}
+
+impl TextureType {
+    pub const ALL: &'static [TextureType] = &[
+        TextureType::None,
+        TextureType::Grid,
+        TextureType::Noise,
+        TextureType::Checker,
+    ];
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            TextureType::None => "None",
+            TextureType::Grid => "Grid",
+            TextureType::Noise => "Noise",
+            TextureType::Checker => "Checker",
+        }
+    }
+}
+
 /// Per-material settings for UI editing
 #[derive(Clone)]
 pub struct MaterialSettings {
@@ -10,6 +38,8 @@ pub struct MaterialSettings {
     pub emission_color: [f32; 3],
     pub emission_strength: f32,
     pub roughness: f32,
+    pub metallic: f32,
+    pub texture: TextureType,
 }
 
 impl Default for MaterialSettings {
@@ -19,6 +49,8 @@ impl Default for MaterialSettings {
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             roughness: 0.5,
+            metallic: 0.0,
+            texture: TextureType::None,
         }
     }
 }
@@ -41,6 +73,8 @@ impl Default for MaterialSettingsMap {
                 emission_color: [0.5, 1.0, 0.5],
                 emission_strength: 0.0,
                 roughness: 0.2,
+                metallic: 0.8,
+                texture: TextureType::None,
             },
         );
 
@@ -52,6 +86,8 @@ impl Default for MaterialSettingsMap {
                 emission_color: [0.0, 1.0, 1.0],
                 emission_strength: 2.0,
                 roughness: 0.1,
+                metallic: 0.0,
+                texture: TextureType::None,
             },
         );
 
@@ -63,6 +99,8 @@ impl Default for MaterialSettingsMap {
                 emission_color: [0.0, 0.0, 0.0],
                 emission_strength: 0.0,
                 roughness: 0.9,
+                metallic: 0.0,
+                texture: TextureType::None,
             },
         );
 

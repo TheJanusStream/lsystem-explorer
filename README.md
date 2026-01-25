@@ -149,7 +149,7 @@ Each material (0, 1, 2) can be edited independently:
 
 ## Camera Controls
 
-- **Left Mouse + Drag** - Orbit camera
+- **Middle Mouse + Drag** - Orbit camera
 - **Right Mouse + Drag** - Pan camera
 - **Scroll Wheel** - Zoom in/out
 
