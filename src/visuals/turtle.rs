@@ -1,5 +1,5 @@
 use crate::core::config::{LSystemConfig, LSystemEngine};
-use crate::visuals::assets::{SurfaceAssets, TurtleMaterialHandle};
+use crate::visuals::assets::{MaterialPalette, SurfaceAssets};
 use bevy::platform::time::Instant;
 use bevy::prelude::*;
 use bevy_symbios::LSystemMeshBuilder;
@@ -20,15 +20,20 @@ pub struct TurtleRenderState {
 
 pub fn sync_material_properties(
     config: Res<LSystemConfig>,
-    mat_handle: Res<TurtleMaterialHandle>,
+    palette: Res<MaterialPalette>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     if !config.is_changed() {
         return;
     }
 
-    if let Some(mat) = materials.get_mut(&mat_handle.0) {
+    // Sync UI settings ONLY to Material 0 (Primary)
+    if let Some(mat) = materials.get_mut(&palette.primary_material) {
+        // We multiply the config color with White, effectively setting it.
+        // NOTE: If the user sets this to Green, it will tint the Vertex Colors.
+        // Users should set this to White if they want pure vertex colors.
         mat.base_color = Color::srgb_from_array(config.material_color);
+
         let emission_linear =
             Color::srgb_from_array(config.emission_color).to_linear() * config.emission_strength;
         mat.emissive = emission_linear;
@@ -41,8 +46,8 @@ pub fn render_turtle(
     engine: Res<LSystemEngine>,
     config: Res<LSystemConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mat_handle: Res<TurtleMaterialHandle>,
-    surface_assets: Res<SurfaceAssets>, // Access our new assets
+    palette: Res<MaterialPalette>,
+    surface_assets: Res<SurfaceAssets>,
     mut render_state: ResMut<TurtleRenderState>,
     old_meshes: Query<Entity, With<LSystemMeshTag>>,
     old_props: Query<Entity, With<LSystemPropTag>>,
@@ -103,17 +108,32 @@ pub fn render_turtle(
     // 3. Build Skeleton (Geometry + Props)
     let skeleton = interpreter.build_skeleton(&sys.state);
 
-    // 4. Mesh Branches
+    // 4. Mesh Branches (Multi-Material Support)
     let builder = LSystemMeshBuilder::new().with_resolution(8);
-    let final_mesh = builder.build(&skeleton);
-    render_state.total_vertices = final_mesh.count_vertices();
+    let mesh_buckets = builder.build(&skeleton);
 
-    commands.spawn((
-        Mesh3d(meshes.add(final_mesh)),
-        MeshMaterial3d(mat_handle.0.clone()),
-        Transform::IDENTITY,
-        LSystemMeshTag,
-    ));
+    let mut total_verts = 0;
+
+    // Iterate over all generated material buckets
+    for (material_id, mesh) in mesh_buckets {
+        total_verts += mesh.count_vertices();
+
+        // Resolve Material ID to Handle
+        let material = palette
+            .materials
+            .get(&material_id)
+            .unwrap_or(&palette.primary_material) // Fallback to Mat 0
+            .clone();
+
+        commands.spawn((
+            Mesh3d(meshes.add(mesh)),
+            MeshMaterial3d(material),
+            Transform::IDENTITY,
+            LSystemMeshTag,
+        ));
+    }
+
+    render_state.total_vertices = total_verts;
 
     // 5. Spawn Props
     for prop in &skeleton.props {
@@ -123,9 +143,11 @@ pub fn render_turtle(
             .or_else(|| surface_assets.meshes.get(&0));
 
         if let Some(handle) = mesh_handle {
+            // Props currently use Primary Material.
+            // In future, SkeletonProp could carry a material_id too.
             commands.spawn((
                 Mesh3d(handle.clone()),
-                MeshMaterial3d(mat_handle.0.clone()),
+                MeshMaterial3d(palette.primary_material.clone()),
                 Transform {
                     translation: prop.position,
                     rotation: prop.rotation,

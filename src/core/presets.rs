@@ -92,4 +92,14 @@ pub const PRESETS: &[LSystemPreset] = &[
         elasticity: 0.0,
         tropism: None,
     },
+    LSystemPreset {
+        name: "PBR Tech-Tree",
+        code: "#define MAX 7\n// Metal Trunk (Silver)\nomega: @(1.0) #(0.2) '(0.9, 0.9, 0.9) ,(0) A(MAX)\n\np1: A(t) : t > 0 ->!(t * 0.05)F[ &(35) B(t-1) ][ /(120) &(35) B(t-1) ]/(120) A(t-1)\n\n// Branches switch to Material 1 (Energy/Glass)\n// Color Gradient: Yellow -> Red\np2: B(t) : t > 0 ->,(1)'(1.0, t/MAX, 0.0)@(0.0) #(0.1)!(t * 0.04)F(8)[ +(30) B(t-1) ][ -(30) B(t-1) ]",
+        iterations: 7,
+        angle: 18.0,
+        step: 10.0,
+        width: 0.1,
+        elasticity: 0.1,
+        tropism: Some(Vec3::new(0.0, -0.5, 0.0)),
+    },
 ];
