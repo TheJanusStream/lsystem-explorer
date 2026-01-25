@@ -1,6 +1,57 @@
 use crate::core::presets::PRESETS;
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use symbios::System;
+
+/// Available prop mesh types for surface IDs
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum PropMeshType {
+    #[default]
+    Leaf,
+    Sphere,
+    Cone,
+    Cylinder,
+    Cube,
+}
+
+impl PropMeshType {
+    pub const ALL: &'static [PropMeshType] = &[
+        PropMeshType::Leaf,
+        PropMeshType::Sphere,
+        PropMeshType::Cone,
+        PropMeshType::Cylinder,
+        PropMeshType::Cube,
+    ];
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            PropMeshType::Leaf => "Leaf",
+            PropMeshType::Sphere => "Sphere",
+            PropMeshType::Cone => "Cone",
+            PropMeshType::Cylinder => "Cylinder",
+            PropMeshType::Cube => "Cube",
+        }
+    }
+}
+
+/// Configuration for prop meshes mapped to surface IDs
+#[derive(Resource)]
+pub struct PropConfig {
+    pub surface_meshes: HashMap<u16, PropMeshType>,
+    pub prop_scale: f32,
+}
+
+impl Default for PropConfig {
+    fn default() -> Self {
+        let mut surface_meshes = HashMap::new();
+        surface_meshes.insert(0, PropMeshType::Leaf);
+        surface_meshes.insert(1, PropMeshType::Sphere);
+        Self {
+            surface_meshes,
+            prop_scale: 1.0,
+        }
+    }
+}
 
 #[derive(Resource)]
 pub struct LSystemConfig {
@@ -82,6 +133,41 @@ impl Default for DerivationDebounce {
             // 0.5s delay to prevent freezing while typing
             timer: Timer::from_seconds(0.5, TimerMode::Once),
             pending: false,
+        }
+    }
+}
+
+/// Export format options
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ExportFormat {
+    #[default]
+    Obj,
+}
+
+impl ExportFormat {
+    pub fn extension(&self) -> &'static str {
+        match self {
+            ExportFormat::Obj => "obj",
+        }
+    }
+}
+
+/// Configuration for batch export
+#[derive(Resource)]
+pub struct ExportConfig {
+    pub base_filename: String,
+    pub variation_count: usize,
+    pub format: ExportFormat,
+    pub export_requested: bool,
+}
+
+impl Default for ExportConfig {
+    fn default() -> Self {
+        Self {
+            base_filename: "LSystem_Variant".to_string(),
+            variation_count: 5,
+            format: ExportFormat::Obj,
+            export_requested: false,
         }
     }
 }

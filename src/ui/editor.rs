@@ -1,15 +1,19 @@
 use crate::core::config::{
-    DerivationDebounce, DerivationStatus, LSystemAnalysis, LSystemConfig, LSystemEngine,
+    DerivationDebounce, DerivationStatus, ExportConfig, LSystemAnalysis, LSystemConfig,
+    LSystemEngine, PropConfig, PropMeshType,
 };
 use crate::core::presets::PRESETS;
 use crate::visuals::turtle::TurtleRenderState;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
 
+#[allow(clippy::too_many_arguments)]
 pub fn ui_system(
     mut contexts: EguiContexts,
     mut config: ResMut<LSystemConfig>,
     engine: ResMut<LSystemEngine>,
+    mut prop_config: ResMut<PropConfig>,
+    mut export_config: ResMut<ExportConfig>,
     mut debounce: ResMut<DerivationDebounce>,
     status: Res<DerivationStatus>,
     analysis: Res<LSystemAnalysis>,
@@ -97,9 +101,10 @@ pub fn ui_system(
                                     ui.label(format!("{}:", key));
 
                                     let mut val_f32 = current_val as f32;
+                                    let speed = dynamic_drag_speed(val_f32);
 
                                     if ui
-                                        .add(egui::DragValue::new(&mut val_f32).speed(0.1))
+                                        .add(egui::DragValue::new(&mut val_f32).speed(speed))
                                         .changed()
                                     {
                                         let new_source = update_define_in_source(
@@ -250,6 +255,83 @@ pub fn ui_system(
                     );
                 });
 
+                ui.collapsing("Prop Settings", |ui| {
+                    ui.add(
+                        egui::Slider::new(&mut prop_config.prop_scale, 0.1..=5.0)
+                            .text("Prop Scale"),
+                    );
+
+                    ui.separator();
+                    ui.label("Surface ID Mappings:");
+
+                    // Show mappings for surface IDs 0-3
+                    for surface_id in 0u16..4 {
+                        ui.horizontal(|ui| {
+                            ui.label(format!("~{}", surface_id));
+
+                            let current = prop_config
+                                .surface_meshes
+                                .get(&surface_id)
+                                .copied()
+                                .unwrap_or(PropMeshType::Leaf);
+
+                            egui::ComboBox::from_id_salt(format!("prop_mesh_{}", surface_id))
+                                .selected_text(current.name())
+                                .show_ui(ui, |ui| {
+                                    for mesh_type in PropMeshType::ALL {
+                                        if ui
+                                            .selectable_label(
+                                                current == *mesh_type,
+                                                mesh_type.name(),
+                                            )
+                                            .clicked()
+                                        {
+                                            prop_config
+                                                .surface_meshes
+                                                .insert(surface_id, *mesh_type);
+                                        }
+                                    }
+                                });
+                        });
+                    }
+                });
+
+                ui.collapsing("Batch Export", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label("Base Name:");
+                        ui.text_edit_singleline(&mut export_config.base_filename);
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Variations:");
+                        ui.add(
+                            egui::DragValue::new(&mut export_config.variation_count)
+                                .range(1..=100)
+                                .speed(0.5),
+                        );
+                    });
+
+                    ui.add_space(5.0);
+
+                    if ui.button("Export OBJ Files").clicked() {
+                        export_config.export_requested = true;
+                    }
+
+                    #[cfg(not(target_arch = "wasm32"))]
+                    ui.label(
+                        egui::RichText::new("Files saved to ./exports/")
+                            .small()
+                            .color(egui::Color32::GRAY),
+                    );
+
+                    #[cfg(target_arch = "wasm32")]
+                    ui.label(
+                        egui::RichText::new("Files download via browser")
+                            .small()
+                            .color(egui::Color32::GRAY),
+                    );
+                });
+
                 ui.add_space(5.0);
 
                 // --- STATUS ---
@@ -281,6 +363,17 @@ pub fn ui_system(
                 }
             });
     }
+}
+
+/// Calculate appropriate drag speed based on value magnitude using log10.
+/// Returns a speed that provides ~1% change per pixel of drag.
+fn dynamic_drag_speed(value: f32) -> f64 {
+    let abs_val = value.abs();
+    if abs_val < 0.0001 {
+        return 0.001; // Minimum speed for near-zero values
+    }
+    let magnitude = abs_val.log10().floor();
+    (10.0_f32.powf(magnitude - 1.0)) as f64
 }
 
 /// Helper to update a #define value in the source string.

@@ -1,5 +1,5 @@
-use crate::core::config::{LSystemConfig, LSystemEngine};
-use crate::visuals::assets::{MaterialPalette, SurfaceAssets};
+use crate::core::config::{LSystemConfig, LSystemEngine, PropConfig, PropMeshType};
+use crate::visuals::assets::{MaterialPalette, PropMeshAssets};
 use bevy::platform::time::Instant;
 use bevy::prelude::*;
 use bevy_symbios::LSystemMeshBuilder;
@@ -45,9 +45,10 @@ pub fn render_turtle(
     mut commands: Commands,
     engine: Res<LSystemEngine>,
     config: Res<LSystemConfig>,
+    prop_config: Res<PropConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
     palette: Res<MaterialPalette>,
-    surface_assets: Res<SurfaceAssets>,
+    prop_assets: Res<PropMeshAssets>,
     mut render_state: ResMut<TurtleRenderState>,
     old_meshes: Query<Entity, With<LSystemMeshTag>>,
     old_props: Query<Entity, With<LSystemPropTag>>,
@@ -137,21 +138,23 @@ pub fn render_turtle(
 
     // 5. Spawn Props
     for prop in &skeleton.props {
-        let mesh_handle = surface_assets
-            .meshes
+        // Look up mesh type from PropConfig, default to Leaf
+        let mesh_type = prop_config
+            .surface_meshes
             .get(&prop.surface_id)
-            .or_else(|| surface_assets.meshes.get(&0));
+            .copied()
+            .unwrap_or(PropMeshType::Leaf);
+
+        let mesh_handle = prop_assets.meshes.get(&mesh_type);
 
         if let Some(handle) = mesh_handle {
-            // Props currently use Primary Material.
-            // In future, SkeletonProp could carry a material_id too.
             commands.spawn((
                 Mesh3d(handle.clone()),
                 MeshMaterial3d(palette.primary_material.clone()),
                 Transform {
                     translation: prop.position,
                     rotation: prop.rotation,
-                    scale: prop.scale,
+                    scale: prop.scale * prop_config.prop_scale,
                 },
                 LSystemPropTag,
             ));

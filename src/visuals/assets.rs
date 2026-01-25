@@ -1,5 +1,6 @@
 // lsystem-explorer/src/visuals/assets.rs
 
+use crate::core::config::PropMeshType;
 use bevy::{platform::collections::HashMap, prelude::*};
 
 #[derive(Resource)]
@@ -8,10 +9,10 @@ pub struct MaterialPalette {
     pub primary_material: Handle<StandardMaterial>, // For UI binding
 }
 
-/// Maps a Surface ID (from L-System ~) to a 3D Mesh handle.
-#[derive(Resource, Default)]
-pub struct SurfaceAssets {
-    pub meshes: HashMap<u16, Handle<Mesh>>,
+/// Stores base meshes for each PropMeshType
+#[derive(Resource)]
+pub struct PropMeshAssets {
+    pub meshes: HashMap<PropMeshType, Handle<Mesh>>,
 }
 
 pub fn setup_turtle_assets(
@@ -58,19 +59,34 @@ pub fn setup_turtle_assets(
         primary_material: mat_0,
     });
 
-    // 2. Surface Assets (Procedural Placeholders)
-    let mut surface_map = HashMap::new();
+    // 2. Prop Mesh Assets - one mesh per PropMeshType
+    let mut prop_meshes = HashMap::new();
 
-    // --- ID 0: Leaf (Flattened Diamond/Cube) ---
-    // Scale: Wide X, Thin Y, Long Z
-    let leaf_mesh = Cuboid::new(0.5, 0.8, 0.02);
-    surface_map.insert(0, meshes.add(leaf_mesh));
+    // Leaf: Flattened cuboid
+    prop_meshes.insert(PropMeshType::Leaf, meshes.add(Cuboid::new(0.5, 0.8, 0.02)));
 
-    // --- ID 1: Flower (Bud/Sphere) ---
-    let flower_mesh = Sphere::new(0.2).mesh().ico(1).unwrap();
-    surface_map.insert(1, meshes.add(flower_mesh));
+    // Sphere: Ico-sphere
+    prop_meshes.insert(
+        PropMeshType::Sphere,
+        meshes.add(Sphere::new(0.2).mesh().ico(2).unwrap()),
+    );
 
-    commands.insert_resource(SurfaceAssets {
-        meshes: surface_map,
+    // Cone: Approximated with a narrow cylinder (Bevy doesn't have built-in cone)
+    prop_meshes.insert(
+        PropMeshType::Cone,
+        meshes.add(Cone::new(0.15, 0.4).mesh().resolution(8)),
+    );
+
+    // Cylinder
+    prop_meshes.insert(
+        PropMeshType::Cylinder,
+        meshes.add(Cylinder::new(0.1, 0.5).mesh().resolution(8)),
+    );
+
+    // Cube
+    prop_meshes.insert(PropMeshType::Cube, meshes.add(Cuboid::new(0.3, 0.3, 0.3)));
+
+    commands.insert_resource(PropMeshAssets {
+        meshes: prop_meshes,
     });
 }
