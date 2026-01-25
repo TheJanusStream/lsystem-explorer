@@ -1,6 +1,6 @@
 use crate::core::config::{
     DerivationDebounce, DerivationStatus, ExportConfig, LSystemAnalysis, LSystemConfig,
-    LSystemEngine, PropConfig, PropMeshType,
+    LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType,
 };
 use crate::core::presets::PRESETS;
 use crate::visuals::turtle::TurtleRenderState;
@@ -13,6 +13,7 @@ pub fn ui_system(
     mut config: ResMut<LSystemConfig>,
     engine: ResMut<LSystemEngine>,
     mut prop_config: ResMut<PropConfig>,
+    mut material_settings: ResMut<MaterialSettingsMap>,
     mut export_config: ResMut<ExportConfig>,
     mut debounce: ResMut<DerivationDebounce>,
     status: Res<DerivationStatus>,
@@ -241,18 +242,30 @@ pub fn ui_system(
                 ui.separator();
 
                 ui.collapsing("Material Settings", |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Base Color:");
-                        ui.color_edit_button_rgb(&mut config.material_color);
-                    });
-                    ui.horizontal(|ui| {
-                        ui.label("Emission:");
-                        ui.color_edit_button_rgb(&mut config.emission_color);
-                    });
-                    ui.add(
-                        egui::Slider::new(&mut config.emission_strength, 0.0..=10.0)
-                            .text("Glow Strength"),
-                    );
+                    let material_names = ["Mat 0 (Primary)", "Mat 1 (Energy)", "Mat 2 (Matte)"];
+
+                    for mat_id in 0u8..3 {
+                        if let Some(settings) = material_settings.settings.get_mut(&mat_id) {
+                            ui.collapsing(material_names[mat_id as usize], |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.label("Base Color:");
+                                    ui.color_edit_button_rgb(&mut settings.base_color);
+                                });
+                                ui.horizontal(|ui| {
+                                    ui.label("Emission:");
+                                    ui.color_edit_button_rgb(&mut settings.emission_color);
+                                });
+                                ui.add(
+                                    egui::Slider::new(&mut settings.emission_strength, 0.0..=10.0)
+                                        .text("Glow"),
+                                );
+                                ui.add(
+                                    egui::Slider::new(&mut settings.roughness, 0.0..=1.0)
+                                        .text("Roughness"),
+                                );
+                            });
+                        }
+                    }
                 });
 
                 ui.collapsing("Prop Settings", |ui| {

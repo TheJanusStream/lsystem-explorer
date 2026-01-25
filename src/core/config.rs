@@ -3,6 +3,73 @@ use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use symbios::System;
 
+/// Per-material settings for UI editing
+#[derive(Clone)]
+pub struct MaterialSettings {
+    pub base_color: [f32; 3],
+    pub emission_color: [f32; 3],
+    pub emission_strength: f32,
+    pub roughness: f32,
+}
+
+impl Default for MaterialSettings {
+    fn default() -> Self {
+        Self {
+            base_color: [1.0, 1.0, 1.0],
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            roughness: 0.5,
+        }
+    }
+}
+
+/// Resource holding editable settings for each material ID
+#[derive(Resource)]
+pub struct MaterialSettingsMap {
+    pub settings: HashMap<u8, MaterialSettings>,
+}
+
+impl Default for MaterialSettingsMap {
+    fn default() -> Self {
+        let mut settings = HashMap::new();
+
+        // Material 0: Primary/Trunk - White base, metallic look
+        settings.insert(
+            0,
+            MaterialSettings {
+                base_color: [0.2, 0.8, 0.2],
+                emission_color: [0.5, 1.0, 0.5],
+                emission_strength: 0.0,
+                roughness: 0.2,
+            },
+        );
+
+        // Material 1: Energy/Leaves - Emissive cyan glow
+        settings.insert(
+            1,
+            MaterialSettings {
+                base_color: [1.0, 1.0, 1.0],
+                emission_color: [0.0, 1.0, 1.0],
+                emission_strength: 2.0,
+                roughness: 0.1,
+            },
+        );
+
+        // Material 2: Matte/Structure - Gray, high roughness
+        settings.insert(
+            2,
+            MaterialSettings {
+                base_color: [0.5, 0.5, 0.5],
+                emission_color: [0.0, 0.0, 0.0],
+                emission_strength: 0.0,
+                roughness: 0.9,
+            },
+        );
+
+        Self { settings }
+    }
+}
+
 /// Available prop mesh types for surface IDs
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum PropMeshType {
@@ -64,10 +131,6 @@ pub struct LSystemConfig {
     pub tropism: Option<Vec3>,
     pub elasticity: f32,
 
-    pub material_color: [f32; 3],
-    pub emission_color: [f32; 3],
-    pub emission_strength: f32,
-
     pub recompile_requested: bool,
     pub auto_update: bool,
 }
@@ -85,10 +148,6 @@ impl Default for LSystemConfig {
 
             tropism: None,
             elasticity: 0.0,
-
-            material_color: [0.2, 0.8, 0.2],
-            emission_color: [0.5, 1.0, 0.5],
-            emission_strength: 0.0,
 
             recompile_requested: true,
             auto_update: true,

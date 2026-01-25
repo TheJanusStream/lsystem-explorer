@@ -1,4 +1,6 @@
-use crate::core::config::{LSystemConfig, LSystemEngine, PropConfig, PropMeshType};
+use crate::core::config::{
+    LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType,
+};
 use crate::visuals::assets::{MaterialPalette, PropMeshAssets};
 use bevy::platform::time::Instant;
 use bevy::prelude::*;
@@ -19,23 +21,28 @@ pub struct TurtleRenderState {
 }
 
 pub fn sync_material_properties(
-    config: Res<LSystemConfig>,
+    material_settings: Res<MaterialSettingsMap>,
     palette: Res<MaterialPalette>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if !config.is_changed() {
+    if !material_settings.is_changed() {
         return;
     }
 
-    // Sync UI settings ONLY to Material 0 (Primary)
-    if let Some(mat) = materials.get_mut(&palette.primary_material) {
-        // We multiply the config color with White, effectively setting it.
-        // NOTE: If the user sets this to Green, it will tint the Vertex Colors.
-        // Users should set this to White if they want pure vertex colors.
-        mat.base_color = Color::srgb_from_array(config.material_color);
+    // Sync UI settings to all materials in the palette
+    for (mat_id, settings) in &material_settings.settings {
+        let Some(handle) = palette.materials.get(mat_id) else {
+            continue;
+        };
+        let Some(mat) = materials.get_mut(handle) else {
+            continue;
+        };
 
-        let emission_linear =
-            Color::srgb_from_array(config.emission_color).to_linear() * config.emission_strength;
+        mat.base_color = Color::srgb_from_array(settings.base_color);
+        mat.perceptual_roughness = settings.roughness;
+
+        let emission_linear = Color::srgb_from_array(settings.emission_color).to_linear()
+            * settings.emission_strength;
         mat.emissive = emission_linear;
     }
 }
@@ -55,7 +62,8 @@ pub fn render_turtle(
 ) {
     let sys = &engine.0;
 
-    if !engine.is_changed() {
+    // Re-render when L-system state OR prop configuration changes
+    if !engine.is_changed() && !prop_config.is_changed() {
         return;
     }
 

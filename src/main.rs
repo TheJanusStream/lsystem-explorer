@@ -8,7 +8,8 @@ mod ui;
 mod visuals;
 
 use core::config::{
-    DerivationDebounce, DerivationStatus, ExportConfig, LSystemConfig, LSystemEngine, PropConfig,
+    DerivationDebounce, DerivationStatus, ExportConfig, LSystemConfig, LSystemEngine,
+    MaterialSettingsMap, PropConfig,
 };
 
 use crate::{core::config::LSystemAnalysis, visuals::turtle::TurtleRenderState};
@@ -35,6 +36,7 @@ fn main() {
         .init_resource::<DerivationDebounce>()
         .init_resource::<LSystemAnalysis>()
         .init_resource::<PropConfig>()
+        .init_resource::<MaterialSettingsMap>()
         .init_resource::<ExportConfig>()
         .init_resource::<TurtleRenderState>()
         // Startup
