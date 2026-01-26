@@ -5,11 +5,12 @@ A real-time 3D L-system visualization tool built with Bevy. Explore parametric g
 ## Features
 
 - **Real-time Editing** - Live grammar compilation with debounced auto-update
-- **Multi-Material PBR** - Three editable materials with base color, emission, and roughness
+- **Async Derivation** - Background thread compilation prevents UI freezing during high-iteration generation
+- **Material Palette** - Three editable PBR materials with base color, emission, roughness, metallic, UV scale, and procedural textures
 - **Parallel Transport Framing** - Smooth branch geometry without gimbal lock
 - **Tropism & Elasticity** - Gravity-influenced growth simulation
 - **Prop System** - Spawn discrete meshes (leaves, spheres, cones) at surface IDs
-- **Batch Export** - Generate multiple stochastic variations as OBJ files
+- **Batch Export** - Generate multiple stochastic variations as OBJ or GLB (binary glTF) files
 - **WASM Support** - Runs in the browser via WebAssembly
 
 ## Quick Start
@@ -131,12 +132,15 @@ p2: A(s) : 0.5 -> F(s) [ & A(s*0.7) ]
 - **Elasticity** - How much branches bend toward tropism vector (0-1)
 - **Tropism Vector** - Direction of gravitational influence
 
-### Material Settings
-Each material (0, 1, 2) can be edited independently:
+### Material Palette
+Each material (0, 1, 2) can be edited independently with palette-first workflow. Changes to materials update in real-time without triggering geometry rebuild:
 - **Base Color** - Albedo color (tints vertex colors)
 - **Emission** - Glow color
 - **Glow Strength** - Emission intensity (0-10)
 - **Roughness** - Surface smoothness (0=mirror, 1=matte)
+- **Metallic** - Metalness (0=dielectric, 1=conductor)
+- **UV Scale** - Texture coordinate tiling multiplier (0.1-10)
+- **Texture** - Procedural texture type (None, Grid, Noise, Checker)
 
 ### Prop Settings
 - **Prop Scale** - Global scale multiplier for all props
@@ -145,7 +149,10 @@ Each material (0, 1, 2) can be edited independently:
 ### Batch Export
 - **Base Name** - Filename prefix for exports
 - **Variations** - Number of stochastic variants to generate
+- **Format** - OBJ (Wavefront) or GLB (binary glTF with PBR materials)
 - Files are saved to `./exports/` (native) or downloaded (WASM)
+
+GLB exports embed PBR material properties (base color, metallic, roughness, emission) and vertex colors directly in the file for import into Blender, Unity, Unreal, and other 3D tools.
 
 ## Camera Controls
 
@@ -155,7 +162,7 @@ Each material (0, 1, 2) can be edited independently:
 
 ## Materials
 
-The renderer provides three pre-configured materials:
+The renderer provides three pre-configured materials in a palette-first workflow. Material tweaks (color, roughness, metallic, textures) update instantly via shader parameters without rebuilding geometry:
 
 | ID | Name | Default Use |
 |----|------|-------------|
@@ -163,7 +170,16 @@ The renderer provides three pre-configured materials:
 | 1 | Energy | Leaves/details - emissive glow |
 | 2 | Matte | Structure - diffuse surface |
 
-Switch materials in grammar with `,{id}` command.
+Switch materials in grammar with `,(id)` command.
+
+## Architecture
+
+### Split Reactivity
+The update loop distinguishes between two independent dirty paths:
+- **Geometry Dirty** - Triggered by grammar, iteration, or interpretation changes. Runs async derivation on a background thread, then rebuilds the mesh.
+- **Material Dirty** - Triggered by palette edits (color, roughness, metallic, UV scale, texture). Only updates shader parameters, no geometry rebuild.
+
+This separation means tweaking material colors never causes expensive tree regeneration.
 
 ## Building
 

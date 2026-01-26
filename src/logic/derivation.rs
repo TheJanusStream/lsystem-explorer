@@ -1,29 +1,81 @@
-use crate::core::config::{DerivationStatus, LSystemAnalysis, LSystemConfig, LSystemEngine};
+use crate::core::config::{
+    DerivationResult, DerivationStatus, DerivationTask, DirtyFlags, LSystemAnalysis, LSystemConfig,
+    LSystemEngine,
+};
 use bevy::prelude::*;
+use bevy::tasks::AsyncComputeTaskPool;
+use std::sync::{Arc, Mutex};
 use symbios::System;
 
-pub fn derive_l_system(
+/// Spawns an async derivation task when a recompile is requested.
+/// If a previous task is still running, it is abandoned (its result will be ignored).
+pub fn start_derivation(
     mut config: ResMut<LSystemConfig>,
-    mut engine: ResMut<LSystemEngine>,
+    mut task: ResMut<DerivationTask>,
     mut status: ResMut<DerivationStatus>,
-    mut analysis: ResMut<LSystemAnalysis>,
 ) {
     if !config.recompile_requested {
         return;
     }
     config.recompile_requested = false;
-
     status.error = None;
+    status.generating = true;
 
-    analysis.uses_implicit_step = false;
-    analysis.uses_implicit_angle = false;
-    analysis.uses_explicit_width = false;
-
-    let sys = &mut engine.0;
-    *sys = System::new();
+    // Abandon any in-progress task by dropping the old shared reference
+    let shared: Arc<Mutex<Option<Result<DerivationResult, String>>>> = Arc::new(Mutex::new(None));
+    task.shared = Some(shared.clone());
 
     let source = config.source_code.clone();
-    let lines: Vec<&str> = source.lines().collect();
+    let iterations = config.iterations;
+
+    let pool = AsyncComputeTaskPool::get();
+    pool.spawn(async move {
+        let result = perform_derivation(&source, iterations);
+        if let Ok(mut guard) = shared.lock() {
+            *guard = Some(result);
+        }
+    })
+    .detach();
+}
+
+/// Polls the async derivation task for completion.
+/// When done, updates the engine state and sets the geometry dirty flag.
+pub fn poll_derivation(
+    mut engine: ResMut<LSystemEngine>,
+    mut task: ResMut<DerivationTask>,
+    mut status: ResMut<DerivationStatus>,
+    mut analysis: ResMut<LSystemAnalysis>,
+    mut dirty: ResMut<DirtyFlags>,
+) {
+    let Some(shared) = &task.shared else {
+        return;
+    };
+    let Ok(mut guard) = shared.lock() else {
+        return;
+    };
+    let Some(result) = guard.take() else {
+        return;
+    };
+    drop(guard);
+    task.shared = None;
+    status.generating = false;
+
+    match result {
+        Ok(derivation) => {
+            engine.0 = derivation.system;
+            *analysis = derivation.analysis;
+            dirty.geometry = true;
+        }
+        Err(err) => {
+            status.error = Some(err);
+        }
+    }
+}
+
+/// Performs L-system parsing and derivation. Runs on a background thread.
+fn perform_derivation(source: &str, iterations: usize) -> Result<DerivationResult, String> {
+    let mut sys = System::new();
+    let mut analysis = LSystemAnalysis::default();
     let mut axiom_set = false;
 
     let mut check_module = |symbol: &str, param_count: usize| {
@@ -43,6 +95,8 @@ pub fn derive_l_system(
         }
     };
 
+    let lines: Vec<&str> = source.lines().collect();
+
     for (i, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
         let line_num = i + 1;
@@ -53,8 +107,7 @@ pub fn derive_l_system(
 
         if trimmed.starts_with("#") {
             if let Err(e) = sys.add_directive(trimmed) {
-                status.error = Some(format!("Line {}: {}", line_num, e));
-                return;
+                return Err(format!("Line {}: {}", line_num, e));
             }
             continue;
         }
@@ -73,8 +126,7 @@ pub fn derive_l_system(
             }
 
             if let Err(e) = sys.set_axiom(axiom_src) {
-                status.error = Some(format!("Line {}: Axiom error: {}", line_num, e));
-                return;
+                return Err(format!("Line {}: Axiom error: {}", line_num, e));
             }
             axiom_set = true;
             continue;
@@ -87,22 +139,24 @@ pub fn derive_l_system(
                 }
 
                 if let Err(e) = sys.add_rule(trimmed) {
-                    status.error = Some(format!("Line {}: Rule error: {}", line_num, e));
-                    return;
+                    return Err(format!("Line {}: Rule error: {}", line_num, e));
                 }
             }
             Err(e) => {
-                status.error = Some(format!("Line {}: Parse error: {}", line_num, e));
-                return;
+                return Err(format!("Line {}: Parse error: {}", line_num, e));
             }
         }
     }
 
     if axiom_set {
-        if let Err(e) = sys.derive(config.iterations) {
-            status.error = Some(format!("Derivation error: {}", e));
-        }
+        sys.derive(iterations)
+            .map_err(|e| format!("Derivation error: {}", e))?;
     } else {
-        status.error = Some("No axiom defined".to_string());
+        return Err("No axiom defined".to_string());
     }
+
+    Ok(DerivationResult {
+        system: sys,
+        analysis,
+    })
 }

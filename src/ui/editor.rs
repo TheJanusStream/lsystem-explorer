@@ -1,6 +1,6 @@
 use crate::core::config::{
-    DerivationDebounce, DerivationStatus, ExportConfig, LSystemAnalysis, LSystemConfig,
-    LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType, TextureType,
+    DerivationDebounce, DerivationStatus, DirtyFlags, ExportConfig, ExportFormat, LSystemAnalysis,
+    LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType, TextureType,
 };
 use crate::core::presets::PRESETS;
 use crate::visuals::turtle::TurtleRenderState;
@@ -16,6 +16,7 @@ pub fn ui_system(
     mut material_settings: ResMut<MaterialSettingsMap>,
     mut export_config: ResMut<ExportConfig>,
     mut debounce: ResMut<DerivationDebounce>,
+    mut dirty: ResMut<DirtyFlags>,
     status: Res<DerivationStatus>,
     analysis: Res<LSystemAnalysis>,
     render_state: Res<TurtleRenderState>,
@@ -219,7 +220,6 @@ pub fn ui_system(
                         config.recompile_requested = true;
                     }
 
-                    // FIX: Track changes in a boolean to avoid holding mutable borrow of `config`
                     let mut tropism_changed = false;
                     if let Some(t) = &mut config.tropism {
                         ui.horizontal(|ui| {
@@ -232,7 +232,6 @@ pub fn ui_system(
                                 ui.add(egui::DragValue::new(&mut t.z).speed(0.1)).changed();
                         });
                     }
-                    // Apply change after borrow ends
                     if tropism_changed {
                         config.recompile_requested = true;
                     }
@@ -241,11 +240,11 @@ pub fn ui_system(
                 ui.add_space(5.0);
                 ui.separator();
 
-                ui.collapsing("Material Settings", |ui| {
+                // --- MATERIAL PALETTE ---
+                ui.collapsing("Material Palette", |ui| {
                     let material_names = ["Mat 0 (Primary)", "Mat 1 (Energy)", "Mat 2 (Matte)"];
 
                     for mat_id in 0u8..3 {
-                        // Read current values into locals
                         let Some(current) = material_settings.settings.get(&mat_id).cloned() else {
                             continue;
                         };
@@ -256,6 +255,7 @@ pub fn ui_system(
                         let mut local_roughness = current.roughness;
                         let mut local_metallic = current.metallic;
                         let mut local_texture = current.texture;
+                        let mut local_uv_scale = current.uv_scale;
 
                         let mut mat_changed = false;
 
@@ -289,6 +289,12 @@ pub fn ui_system(
                                         .text("Metallic"),
                                 )
                                 .changed();
+                            mat_changed |= ui
+                                .add(
+                                    egui::Slider::new(&mut local_uv_scale, 0.1..=10.0)
+                                        .text("UV Scale"),
+                                )
+                                .changed();
 
                             ui.horizontal(|ui| {
                                 ui.label("Texture:");
@@ -311,7 +317,6 @@ pub fn ui_system(
                             });
                         });
 
-                        // Only write back if changed
                         if mat_changed
                             && let Some(settings) = material_settings.settings.get_mut(&mat_id)
                         {
@@ -321,12 +326,13 @@ pub fn ui_system(
                             settings.roughness = local_roughness;
                             settings.metallic = local_metallic;
                             settings.texture = local_texture;
+                            settings.uv_scale = local_uv_scale;
+                            dirty.materials = true;
                         }
                     }
                 });
 
                 ui.collapsing("Prop Settings", |ui| {
-                    // Read current values into locals to avoid marking resource as changed
                     let mut local_prop_scale = prop_config.prop_scale;
                     let scale_changed = ui
                         .add(egui::Slider::new(&mut local_prop_scale, 0.1..=5.0).text("Prop Scale"))
@@ -335,10 +341,8 @@ pub fn ui_system(
                     ui.separator();
                     ui.label("Surface ID Mappings:");
 
-                    // Track mesh mapping changes
                     let mut mesh_changes: Vec<(u16, PropMeshType)> = Vec::new();
 
-                    // Show mappings for surface IDs 0-3
                     for surface_id in 0u16..4 {
                         ui.horizontal(|ui| {
                             ui.label(format!("~{}", surface_id));
@@ -367,12 +371,13 @@ pub fn ui_system(
                         });
                     }
 
-                    // Only mutate prop_config if something actually changed
                     if scale_changed {
                         prop_config.prop_scale = local_prop_scale;
+                        dirty.geometry = true;
                     }
                     for (surface_id, mesh_type) in mesh_changes {
                         prop_config.surface_meshes.insert(surface_id, mesh_type);
+                        dirty.geometry = true;
                     }
                 });
 
@@ -391,9 +396,28 @@ pub fn ui_system(
                         );
                     });
 
+                    ui.horizontal(|ui| {
+                        ui.label("Format:");
+                        egui::ComboBox::from_id_salt("export_format")
+                            .selected_text(export_config.format.name())
+                            .show_ui(ui, |ui| {
+                                for fmt in ExportFormat::ALL {
+                                    if ui
+                                        .selectable_label(export_config.format == *fmt, fmt.name())
+                                        .clicked()
+                                    {
+                                        export_config.format = *fmt;
+                                    }
+                                }
+                            });
+                    });
+
                     ui.add_space(5.0);
 
-                    if ui.button("Export OBJ Files").clicked() {
+                    if ui
+                        .button(format!("Export {} Files", export_config.format.name()))
+                        .clicked()
+                    {
                         export_config.export_requested = true;
                     }
 
@@ -415,7 +439,9 @@ pub fn ui_system(
                 ui.add_space(5.0);
 
                 // --- STATUS ---
-                if let Some(err) = &status.error {
+                if status.generating {
+                    ui.colored_label(egui::Color32::YELLOW, "⏳ Generating...");
+                } else if let Some(err) = &status.error {
                     ui.group(|ui| {
                         ui.colored_label(egui::Color32::RED, "❌ Parse Error:");
                         ui.label(
@@ -446,11 +472,10 @@ pub fn ui_system(
 }
 
 /// Calculate appropriate drag speed based on value magnitude using log10.
-/// Returns a speed that provides ~1% change per pixel of drag.
 fn dynamic_drag_speed(value: f32) -> f64 {
     let abs_val = value.abs();
     if abs_val < 0.0001 {
-        return 0.001; // Minimum speed for near-zero values
+        return 0.001;
     }
     let magnitude = abs_val.log10().floor();
     (10.0_f32.powf(magnitude - 1.0)) as f64
@@ -464,9 +489,7 @@ fn update_define_in_source(source: &str, key: &str, new_value: f32) -> String {
         let trimmed = line.trim();
         if trimmed.starts_with("#define") {
             let parts: Vec<&str> = trimmed.split_whitespace().collect();
-            // Expected parts: ["#define", "KEY", "VALUE", ...]
             if parts.len() >= 2 && parts[1] == key {
-                // Reconstruct the line
                 new_lines.push(format!("#define {} {}", key, new_value));
                 continue;
             }

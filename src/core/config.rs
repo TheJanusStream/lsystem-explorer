@@ -1,7 +1,17 @@
 use crate::core::presets::PRESETS;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
+use std::sync::{Arc, Mutex};
 use symbios::System;
+
+/// Explicit dirty flags for split reactivity.
+/// Geometry dirty = requires derivation + remesh.
+/// Materials dirty = requires only material handle updates.
+#[derive(Resource, Default)]
+pub struct DirtyFlags {
+    pub geometry: bool,
+    pub materials: bool,
+}
 
 /// Available procedural texture types for materials
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
@@ -40,6 +50,7 @@ pub struct MaterialSettings {
     pub roughness: f32,
     pub metallic: f32,
     pub texture: TextureType,
+    pub uv_scale: f32,
 }
 
 impl Default for MaterialSettings {
@@ -51,6 +62,7 @@ impl Default for MaterialSettings {
             roughness: 0.5,
             metallic: 0.0,
             texture: TextureType::None,
+            uv_scale: 1.0,
         }
     }
 }
@@ -65,7 +77,6 @@ impl Default for MaterialSettingsMap {
     fn default() -> Self {
         let mut settings = HashMap::new();
 
-        // Material 0: Primary/Trunk - White base, metallic look
         settings.insert(
             0,
             MaterialSettings {
@@ -75,10 +86,10 @@ impl Default for MaterialSettingsMap {
                 roughness: 0.2,
                 metallic: 0.8,
                 texture: TextureType::None,
+                uv_scale: 1.0,
             },
         );
 
-        // Material 1: Energy/Leaves - Emissive cyan glow
         settings.insert(
             1,
             MaterialSettings {
@@ -88,10 +99,10 @@ impl Default for MaterialSettingsMap {
                 roughness: 0.1,
                 metallic: 0.0,
                 texture: TextureType::None,
+                uv_scale: 1.0,
             },
         );
 
-        // Material 2: Matte/Structure - Gray, high roughness
         settings.insert(
             2,
             MaterialSettings {
@@ -101,6 +112,7 @@ impl Default for MaterialSettingsMap {
                 roughness: 0.9,
                 metallic: 0.0,
                 texture: TextureType::None,
+                uv_scale: 1.0,
             },
         );
 
@@ -193,7 +205,7 @@ impl Default for LSystemConfig {
     }
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Clone)]
 pub struct LSystemAnalysis {
     pub uses_implicit_step: bool,
     pub uses_implicit_angle: bool,
@@ -215,6 +227,8 @@ impl Default for LSystemEngine {
 pub struct DerivationStatus {
     /// None = Success, Some(String) = Error Message
     pub error: Option<String>,
+    /// True while an async derivation task is running
+    pub generating: bool,
 }
 
 /// Debounce timer for auto-updates
@@ -227,11 +241,26 @@ pub struct DerivationDebounce {
 impl Default for DerivationDebounce {
     fn default() -> Self {
         Self {
-            // 0.5s delay to prevent freezing while typing
             timer: Timer::from_seconds(0.5, TimerMode::Once),
             pending: false,
         }
     }
+}
+
+/// Result from an async derivation task
+pub struct DerivationResult {
+    pub system: System,
+    pub analysis: LSystemAnalysis,
+}
+
+/// Type alias for the shared async derivation result container.
+pub type SharedDerivationResult = Arc<Mutex<Option<Result<DerivationResult, String>>>>;
+
+/// Holds a reference to a pending async derivation result.
+/// The background task writes into the shared Arc<Mutex<Option<...>>> when complete.
+#[derive(Resource, Default)]
+pub struct DerivationTask {
+    pub shared: Option<SharedDerivationResult>,
 }
 
 /// Export format options
@@ -239,12 +268,23 @@ impl Default for DerivationDebounce {
 pub enum ExportFormat {
     #[default]
     Obj,
+    Glb,
 }
 
 impl ExportFormat {
+    pub const ALL: &'static [ExportFormat] = &[ExportFormat::Obj, ExportFormat::Glb];
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            ExportFormat::Obj => "OBJ",
+            ExportFormat::Glb => "GLB",
+        }
+    }
+
     pub fn extension(&self) -> &'static str {
         match self {
             ExportFormat::Obj => "obj",
+            ExportFormat::Glb => "glb",
         }
     }
 }

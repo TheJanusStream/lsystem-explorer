@@ -1,7 +1,9 @@
 use crate::core::config::{
-    LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType, TextureType,
+    DirtyFlags, LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType,
+    TextureType,
 };
 use crate::visuals::assets::{MaterialPalette, ProceduralTextures, PropMeshAssets};
+use bevy::math::{Affine2, Vec2};
 use bevy::platform::time::Instant;
 use bevy::prelude::*;
 use bevy_symbios::LSystemMeshBuilder;
@@ -10,7 +12,6 @@ use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
 #[derive(Component)]
 pub struct LSystemMeshTag;
 
-// Tag for discrete objects (Leaves, Flowers) to allow cleanup
 #[derive(Component)]
 pub struct LSystemPropTag;
 
@@ -21,16 +22,17 @@ pub struct TurtleRenderState {
 }
 
 pub fn sync_material_properties(
+    mut dirty: ResMut<DirtyFlags>,
     material_settings: Res<MaterialSettingsMap>,
     palette: Res<MaterialPalette>,
     proc_textures: Res<ProceduralTextures>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    if !material_settings.is_changed() {
+    if !dirty.materials {
         return;
     }
+    dirty.materials = false;
 
-    // Sync UI settings to all materials in the palette
     for (mat_id, settings) in &material_settings.settings {
         let Some(handle) = palette.materials.get(mat_id) else {
             continue;
@@ -47,17 +49,19 @@ pub fn sync_material_properties(
             * settings.emission_strength;
         mat.emissive = emission_linear;
 
-        // Apply texture based on TextureType
         mat.base_color_texture = match settings.texture {
             TextureType::None => None,
             other => proc_textures.textures.get(&other).cloned(),
         };
+
+        mat.uv_transform = Affine2::from_scale(Vec2::splat(settings.uv_scale));
     }
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn render_turtle(
     mut commands: Commands,
+    mut dirty: ResMut<DirtyFlags>,
     engine: Res<LSystemEngine>,
     config: Res<LSystemConfig>,
     prop_config: Res<PropConfig>,
@@ -68,12 +72,12 @@ pub fn render_turtle(
     old_meshes: Query<Entity, With<LSystemMeshTag>>,
     old_props: Query<Entity, With<LSystemPropTag>>,
 ) {
-    let sys = &engine.0;
-
-    // Re-render when L-system state OR prop configuration changes
-    if !engine.is_changed() && !prop_config.is_changed() {
+    if !dirty.geometry {
         return;
     }
+    dirty.geometry = false;
+
+    let sys = &engine.0;
 
     // 1. Cleanup
     for entity in &old_meshes {
@@ -109,13 +113,11 @@ pub fn render_turtle(
         .map(|&w| w as f32)
         .unwrap_or(config.default_width);
 
-    let tropism_compat = config.tropism;
-
     let turtle_config = TurtleConfig {
         default_step,
         default_angle,
         initial_width,
-        tropism: tropism_compat,
+        tropism: config.tropism,
         elasticity: config.elasticity,
     };
 
@@ -131,15 +133,13 @@ pub fn render_turtle(
 
     let mut total_verts = 0;
 
-    // Iterate over all generated material buckets
     for (material_id, mesh) in mesh_buckets {
         total_verts += mesh.count_vertices();
 
-        // Resolve Material ID to Handle
         let material = palette
             .materials
             .get(&material_id)
-            .unwrap_or(&palette.primary_material) // Fallback to Mat 0
+            .unwrap_or(&palette.primary_material)
             .clone();
 
         commands.spawn((
@@ -154,7 +154,6 @@ pub fn render_turtle(
 
     // 5. Spawn Props
     for prop in &skeleton.props {
-        // Look up mesh type from PropConfig, default to Leaf
         let mesh_type = prop_config
             .surface_meshes
             .get(&prop.surface_id)
