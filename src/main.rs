@@ -2,17 +2,12 @@ use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
 
-mod core;
-mod logic;
-mod ui;
-mod visuals;
-
-use core::config::{
-    DerivationDebounce, DerivationStatus, DerivationTask, DirtyFlags, ExportConfig, LSystemConfig,
-    LSystemEngine, MaterialSettingsMap, PropConfig,
+use lsystem_explorer::core::config::{
+    DerivationDebounce, DerivationStatus, DerivationTask, DirtyFlags, ExportConfig,
+    LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig,
 };
-
-use crate::{core::config::LSystemAnalysis, visuals::turtle::TurtleRenderState};
+use lsystem_explorer::visuals::turtle::TurtleRenderState;
+use lsystem_explorer::{logic, ui, visuals};
 
 fn main() {
     App::new()
