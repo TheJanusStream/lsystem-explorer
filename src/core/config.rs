@@ -120,7 +120,7 @@ impl Default for MaterialSettingsMap {
     }
 }
 
-/// Available prop mesh types for surface IDs
+/// Available prop mesh types for prop IDs
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum PropMeshType {
     #[default]
@@ -151,20 +151,20 @@ impl PropMeshType {
     }
 }
 
-/// Configuration for prop meshes mapped to surface IDs
+/// Configuration for prop meshes mapped to prop IDs
 #[derive(Resource)]
 pub struct PropConfig {
-    pub surface_meshes: HashMap<u16, PropMeshType>,
+    pub prop_meshes: HashMap<u16, PropMeshType>,
     pub prop_scale: f32,
 }
 
 impl Default for PropConfig {
     fn default() -> Self {
-        let mut surface_meshes = HashMap::new();
-        surface_meshes.insert(0, PropMeshType::Leaf);
-        surface_meshes.insert(1, PropMeshType::Sphere);
+        let mut prop_meshes = HashMap::new();
+        prop_meshes.insert(0, PropMeshType::Leaf);
+        prop_meshes.insert(1, PropMeshType::Sphere);
         Self {
-            surface_meshes,
+            prop_meshes,
             prop_scale: 1.0,
         }
     }

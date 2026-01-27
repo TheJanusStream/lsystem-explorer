@@ -9,7 +9,7 @@ A real-time 3D L-system visualization tool built with Bevy. Explore parametric g
 - **Material Palette** - Three editable PBR materials with base color, emission, roughness, metallic, UV scale, and procedural textures
 - **Parallel Transport Framing** - Smooth branch geometry without gimbal lock
 - **Tropism & Elasticity** - Gravity-influenced growth simulation
-- **Prop System** - Spawn discrete meshes (leaves, spheres, cones) at surface IDs
+- **Prop System** - Spawn discrete meshes (leaves, spheres, cones) at prop IDs
 - **Batch Export** - Generate multiple stochastic variations as OBJ or GLB (binary glTF) files
 - **WASM Support** - Runs in the browser via WebAssembly
 
@@ -57,20 +57,18 @@ cargo build --target wasm32-unknown-unknown --release
 |--------|------------|-------------|
 | `,` | `(id)` | Switch to material ID (0, 1, or 2) |
 | `'` | `(r, g, b)` | Set vertex color (0.0-1.0 per channel) |
-| `@` | `(metallic)` | Set metallic value (0.0-1.0) |
-| `#` | `(roughness)` | Set roughness value (0.0-1.0) |
 
 ### Prop Commands
 
 | Symbol | Parameters | Description |
 |--------|------------|-------------|
-| `~` | `(surface_id, scale)` | Spawn a prop at current position |
+| `~` | `(prop_id, scale)` | Spawn a prop at current position |
 
 Props are mapped to mesh types in the UI:
-- Surface ID 0 = Leaf (default)
-- Surface ID 1 = Sphere
-- Surface ID 2 = Cone
-- Surface ID 3 = Cylinder/Cube
+- Prop ID 0 = Leaf (default)
+- Prop ID 1 = Sphere
+- Prop ID 2 = Cone
+- Prop ID 3 = Cylinder/Cube
 
 ### Conditions
 
@@ -80,6 +78,65 @@ Props are mapped to mesh types in the UI:
 | `PROB` | Stochastic: match with probability (0.0-1.0) |
 | `x > N` | Parameter comparison |
 | `x = N` | Parameter equality |
+
+### Context-Sensitive Rules
+
+Context-sensitive L-systems (also known as 2L-systems or IL-systems) allow production rules to match based on neighboring symbols, not just the predecessor itself. This enables signal propagation, acropetal/basipetal information flow, and interaction between branches.
+
+#### Syntax
+
+```
+LEFT_CONTEXT < PREDECESSOR > RIGHT_CONTEXT : CONDITION -> SUCCESSORS
+```
+
+- **Left context** (`<`): Symbols that must appear immediately before the predecessor in the current string. Multiple context symbols are read left-to-right.
+- **Right context** (`>`): Symbols that must appear immediately after the predecessor. Multiple context symbols are read left-to-right.
+- Either or both contexts can be omitted for context-free rules.
+
+#### The `#ignore` Directive
+
+When checking context, turtle commands like `+`, `-`, `&`, `/`, `[`, `]` would break adjacency between biological symbols. The `#ignore` directive tells the matching engine to skip specified symbols during context checks:
+
+```
+#ignore: + - & ^ / \ [ ]
+```
+
+This means `A + B` still counts as "A is left context of B" because `+` is ignored during matching.
+
+#### Examples
+
+**Signal propagation** (acropetal flow from base to tip):
+
+```
+#ignore: + - & ^ / \ F
+omega: B(1) A A A A
+p1: B(x) < A -> B(x+1)
+p2: B(x) -> B(x)
+```
+
+After 1 iteration: `B(1) B(2) A A A` — the signal `B` propagates rightward, carrying an incrementing parameter.
+
+**Bidirectional context** (both left and right neighbors must match):
+
+```
+#ignore: + -
+omega: A C B A
+p1: A < C > B -> D
+```
+
+`C` is only replaced by `D` when preceded by `A` and followed by `B`.
+
+**Acropetal signal in a branching structure** (ABOP Chapter 1.9):
+
+```
+#define D 1
+#ignore: + - F
+omega: F A F A F A
+p1: A < A > A : * -> F A
+p2: A < A : * -> A
+```
+
+Signals propagate along chains while respecting branch topology — `[` and `]` delimit branches, so context matching does not cross branch boundaries unless those symbols are ignored.
 
 ## Example Grammars
 
@@ -144,7 +201,7 @@ Each material (0, 1, 2) can be edited independently with palette-first workflow.
 
 ### Prop Settings
 - **Prop Scale** - Global scale multiplier for all props
-- **Surface ID Mappings** - Assign mesh types to surface IDs
+- **Prop ID Mappings** - Assign mesh types to prop IDs
 
 ### Batch Export
 - **Base Name** - Filename prefix for exports

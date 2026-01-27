@@ -66,6 +66,7 @@ pub fn render_turtle(
     config: Res<LSystemConfig>,
     prop_config: Res<PropConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
     palette: Res<MaterialPalette>,
     prop_assets: Res<PropMeshAssets>,
     mut render_state: ResMut<TurtleRenderState>,
@@ -152,10 +153,10 @@ pub fn render_turtle(
 
     render_state.total_vertices = total_verts;
 
-    // 5. Spawn Props
+    // 5. Spawn Props (with inherited material ID and color)
     for prop in &skeleton.props {
         let mesh_type = prop_config
-            .surface_meshes
+            .prop_meshes
             .get(&prop.surface_id)
             .copied()
             .unwrap_or(PropMeshType::Leaf);
@@ -163,9 +164,22 @@ pub fn render_turtle(
         let mesh_handle = prop_assets.meshes.get(&mesh_type);
 
         if let Some(handle) = mesh_handle {
+            let base_handle = palette
+                .materials
+                .get(&prop.material_id)
+                .unwrap_or(&palette.primary_material);
+
+            let base_mat = materials.get(base_handle).cloned().unwrap_or_default();
+
+            let prop_color = Color::srgba(prop.color.x, prop.color.y, prop.color.z, prop.color.w);
+            let prop_material = materials.add(StandardMaterial {
+                base_color: prop_color,
+                ..base_mat
+            });
+
             commands.spawn((
                 Mesh3d(handle.clone()),
-                MeshMaterial3d(palette.primary_material.clone()),
+                MeshMaterial3d(prop_material),
                 Transform {
                     translation: prop.position,
                     rotation: prop.rotation,

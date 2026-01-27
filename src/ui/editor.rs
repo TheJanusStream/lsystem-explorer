@@ -94,33 +94,26 @@ pub fn ui_system(
 
                     let mut constants_changed = false;
 
-                    egui::Grid::new("constants_grid")
-                        .num_columns(2)
-                        .striped(true)
-                        .show(ui, |ui| {
-                            for key in keys {
-                                if let Some(&current_val) = sys.constants.get(&key) {
-                                    ui.label(format!("{}:", key));
+                    for key in keys {
+                        if let Some(&current_val) = sys.constants.get(&key) {
+                            let mut val_f32 = current_val as f32;
+                            let (lo, hi) = smart_slider_range(val_f32);
 
-                                    let mut val_f32 = current_val as f32;
-                                    let speed = dynamic_drag_speed(val_f32);
-
-                                    if ui
-                                        .add(egui::DragValue::new(&mut val_f32).speed(speed))
-                                        .changed()
-                                    {
-                                        let new_source = update_define_in_source(
-                                            &config.source_code,
-                                            &key,
-                                            val_f32,
-                                        );
-                                        config.source_code = new_source;
-                                        constants_changed = true;
-                                    }
-                                    ui.end_row();
-                                }
+                            if ui
+                                .add(
+                                    egui::Slider::new(&mut val_f32, lo..=hi)
+                                        .text(&key)
+                                        .clamping(egui::SliderClamping::Never),
+                                )
+                                .changed()
+                            {
+                                let new_source =
+                                    update_define_in_source(&config.source_code, &key, val_f32);
+                                config.source_code = new_source;
+                                constants_changed = true;
                             }
-                        });
+                        }
+                    }
 
                     if constants_changed {
                         config.recompile_requested = true;
@@ -135,50 +128,35 @@ pub fn ui_system(
                 ui.heading("Interpretation:");
 
                 if analysis.uses_implicit_step
-                    || analysis.uses_implicit_angle
-                    || !analysis.uses_explicit_width
+                    && ui
+                        .add(
+                            egui::Slider::new(&mut config.step_size, 0.1..=100.0)
+                                .text("Step")
+                                .logarithmic(true),
+                        )
+                        .changed()
                 {
-                    ui.horizontal(|ui| {
-                        if analysis.uses_implicit_step {
-                            ui.label("Step:");
-                            if ui
-                                .add(
-                                    egui::DragValue::new(&mut config.step_size)
-                                        .speed(0.1)
-                                        .range(0.1..=100.0),
-                                )
-                                .changed()
-                            {
-                                config.recompile_requested = true;
-                            }
-                        }
-                        if analysis.uses_implicit_angle {
-                            ui.label("Angle:");
-                            if ui
-                                .add(
-                                    egui::DragValue::new(&mut config.default_angle)
-                                        .speed(1.0)
-                                        .range(0.0..=180.0),
-                                )
-                                .changed()
-                            {
-                                config.recompile_requested = true;
-                            }
-                        }
-                        if !analysis.uses_explicit_width {
-                            ui.label("Width:");
-                            if ui
-                                .add(
-                                    egui::DragValue::new(&mut config.default_width)
-                                        .speed(0.01)
-                                        .range(0.001..=10.0),
-                                )
-                                .changed()
-                            {
-                                config.recompile_requested = true;
-                            }
-                        }
-                    });
+                    config.recompile_requested = true;
+                }
+                if analysis.uses_implicit_angle
+                    && ui
+                        .add(
+                            egui::Slider::new(&mut config.default_angle, 0.0..=180.0).text("Angle"),
+                        )
+                        .changed()
+                {
+                    config.recompile_requested = true;
+                }
+                if !analysis.uses_explicit_width
+                    && ui
+                        .add(
+                            egui::Slider::new(&mut config.default_width, 0.001..=10.0)
+                                .text("Width")
+                                .logarithmic(true),
+                        )
+                        .changed()
+                {
+                    config.recompile_requested = true;
                 }
 
                 ui.horizontal(|ui| {
@@ -339,21 +317,21 @@ pub fn ui_system(
                         .changed();
 
                     ui.separator();
-                    ui.label("Surface ID Mappings:");
+                    ui.label("Prop ID Mappings:");
 
                     let mut mesh_changes: Vec<(u16, PropMeshType)> = Vec::new();
 
-                    for surface_id in 0u16..4 {
+                    for prop_id in 0u16..4 {
                         ui.horizontal(|ui| {
-                            ui.label(format!("~{}", surface_id));
+                            ui.label(format!("~{}", prop_id));
 
                             let current = prop_config
-                                .surface_meshes
-                                .get(&surface_id)
+                                .prop_meshes
+                                .get(&prop_id)
                                 .copied()
                                 .unwrap_or(PropMeshType::Leaf);
 
-                            egui::ComboBox::from_id_salt(format!("prop_mesh_{}", surface_id))
+                            egui::ComboBox::from_id_salt(format!("prop_mesh_{}", prop_id))
                                 .selected_text(current.name())
                                 .show_ui(ui, |ui| {
                                     for mesh_type in PropMeshType::ALL {
@@ -364,7 +342,7 @@ pub fn ui_system(
                                             )
                                             .clicked()
                                         {
-                                            mesh_changes.push((surface_id, *mesh_type));
+                                            mesh_changes.push((prop_id, *mesh_type));
                                         }
                                     }
                                 });
@@ -375,8 +353,8 @@ pub fn ui_system(
                         prop_config.prop_scale = local_prop_scale;
                         dirty.geometry = true;
                     }
-                    for (surface_id, mesh_type) in mesh_changes {
-                        prop_config.surface_meshes.insert(surface_id, mesh_type);
+                    for (prop_id, mesh_type) in mesh_changes {
+                        prop_config.prop_meshes.insert(prop_id, mesh_type);
                         dirty.geometry = true;
                     }
                 });
@@ -471,14 +449,22 @@ pub fn ui_system(
     }
 }
 
-/// Calculate appropriate drag speed based on value magnitude using log10.
-fn dynamic_drag_speed(value: f32) -> f64 {
+/// Compute a slider range centered on the current value.
+///
+/// For zero or near-zero: [-1, 1].
+/// For negative values: [2*val, 0] (or [2*val, -2*val] if very negative).
+/// For positive values: [0, 2*val].
+fn smart_slider_range(value: f32) -> (f32, f32) {
     let abs_val = value.abs();
-    if abs_val < 0.0001 {
-        return 0.001;
+    if abs_val < 0.001 {
+        return (-1.0, 1.0);
     }
-    let magnitude = abs_val.log10().floor();
-    (10.0_f32.powf(magnitude - 1.0)) as f64
+    let extent = abs_val * 2.0;
+    if value < 0.0 {
+        (-extent, extent)
+    } else {
+        (0.0, extent)
+    }
 }
 
 /// Helper to update a #define value in the source string.
