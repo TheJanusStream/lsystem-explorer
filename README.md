@@ -263,6 +263,7 @@ cargo build --target wasm32-unknown-unknown --release
 - [bevy_panorbit_camera](https://github.com/Plonq/bevy_panorbit_camera) - Camera controls
 - [symbios](https://github.com/codewright/symbios) - L-system parsing and derivation
 - [symbios-turtle-3d](https://github.com/codewright/symbios-turtle-3d) - 3D turtle interpreter
+- [bevy_symbios](https://github.com/codewright/bevy_symbios) - Bevy mesh generation, materials, and export
 
 ## References
 

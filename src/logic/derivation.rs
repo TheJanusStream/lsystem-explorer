@@ -46,6 +46,7 @@ pub fn poll_derivation(
     mut status: ResMut<DerivationStatus>,
     mut analysis: ResMut<LSystemAnalysis>,
     mut dirty: ResMut<DirtyFlags>,
+    mut render_state: ResMut<crate::visuals::turtle::TurtleRenderState>,
 ) {
     let Some(shared) = &task.shared else {
         return;
@@ -64,6 +65,7 @@ pub fn poll_derivation(
         Ok(derivation) => {
             engine.0 = derivation.system;
             *analysis = derivation.analysis;
+            render_state.derivation_time_ms = derivation.derivation_time_ms;
             dirty.geometry = true;
         }
         Err(err) => {
@@ -74,6 +76,7 @@ pub fn poll_derivation(
 
 /// Performs L-system parsing and derivation. Runs on a background thread.
 fn perform_derivation(source: &str, iterations: usize) -> Result<DerivationResult, String> {
+    let start_time = std::time::Instant::now();
     let mut sys = System::new();
     let mut analysis = LSystemAnalysis::default();
     let mut axiom_set = false;
@@ -158,5 +161,6 @@ fn perform_derivation(source: &str, iterations: usize) -> Result<DerivationResul
     Ok(DerivationResult {
         system: sys,
         analysis,
+        derivation_time_ms: start_time.elapsed().as_secs_f32() * 1000.0,
     })
 }

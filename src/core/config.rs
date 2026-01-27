@@ -146,6 +146,7 @@ impl Default for DerivationDebounce {
 pub struct DerivationResult {
     pub system: System,
     pub analysis: LSystemAnalysis,
+    pub derivation_time_ms: f32,
 }
 
 /// Type alias for the shared async derivation result container.

@@ -17,7 +17,8 @@ pub struct LSystemPropTag;
 #[derive(Resource, Default)]
 pub struct TurtleRenderState {
     pub total_vertices: usize,
-    pub generation_time_ms: f32,
+    pub meshing_time_ms: f32,
+    pub derivation_time_ms: f32,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -113,8 +114,6 @@ pub fn render_turtle(
         ));
     }
 
-    render_state.total_vertices = total_verts;
-
     // 5. Spawn Props (with inherited material ID and color)
     for prop in &skeleton.props {
         let mesh_type = prop_config
@@ -126,6 +125,9 @@ pub fn render_turtle(
         let mesh_handle = prop_assets.meshes.get(&mesh_type);
 
         if let Some(handle) = mesh_handle {
+            if let Some(mesh) = meshes.get(handle) {
+                total_verts += mesh.count_vertices();
+            }
             let base_handle = palette
                 .materials
                 .get(&prop.material_id)
@@ -133,9 +135,15 @@ pub fn render_turtle(
 
             let base_mat = materials.get(base_handle).cloned().unwrap_or_default();
 
-            let prop_color = Color::srgba(prop.color.x, prop.color.y, prop.color.z, prop.color.w);
+            let base_srgba = base_mat.base_color.to_srgba();
+            let blended = Color::srgba(
+                base_srgba.red * prop.color.x,
+                base_srgba.green * prop.color.y,
+                base_srgba.blue * prop.color.z,
+                base_srgba.alpha * prop.color.w,
+            );
             let prop_material = materials.add(StandardMaterial {
-                base_color: prop_color,
+                base_color: blended,
                 ..base_mat
             });
 
@@ -152,5 +160,6 @@ pub fn render_turtle(
         }
     }
 
-    render_state.generation_time_ms = start_time.elapsed().as_secs_f32() * 1000.0;
+    render_state.total_vertices = total_verts;
+    render_state.meshing_time_ms = start_time.elapsed().as_secs_f32() * 1000.0;
 }
