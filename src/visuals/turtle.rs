@@ -1,13 +1,12 @@
-use crate::core::config::{
-    DirtyFlags, LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType,
-    TextureType,
-};
-use crate::visuals::assets::{MaterialPalette, ProceduralTextures, PropMeshAssets};
-use bevy::math::{Affine2, Vec2};
+use crate::core::config::{DirtyFlags, LSystemConfig, LSystemEngine, PropConfig, PropMeshType};
+use crate::visuals::assets::PropMeshAssets;
 use bevy::platform::time::Instant;
 use bevy::prelude::*;
 use bevy_symbios::LSystemMeshBuilder;
+use bevy_symbios::materials::MaterialPalette;
 use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
+
+// sync_material_properties is now provided by bevy_symbios::materials.
 
 #[derive(Component)]
 pub struct LSystemMeshTag;
@@ -19,43 +18,6 @@ pub struct LSystemPropTag;
 pub struct TurtleRenderState {
     pub total_vertices: usize,
     pub generation_time_ms: f32,
-}
-
-pub fn sync_material_properties(
-    mut dirty: ResMut<DirtyFlags>,
-    material_settings: Res<MaterialSettingsMap>,
-    palette: Res<MaterialPalette>,
-    proc_textures: Res<ProceduralTextures>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-) {
-    if !dirty.materials {
-        return;
-    }
-    dirty.materials = false;
-
-    for (mat_id, settings) in &material_settings.settings {
-        let Some(handle) = palette.materials.get(mat_id) else {
-            continue;
-        };
-        let Some(mat) = materials.get_mut(handle) else {
-            continue;
-        };
-
-        mat.base_color = Color::srgb_from_array(settings.base_color);
-        mat.perceptual_roughness = settings.roughness;
-        mat.metallic = settings.metallic;
-
-        let emission_linear = Color::srgb_from_array(settings.emission_color).to_linear()
-            * settings.emission_strength;
-        mat.emissive = emission_linear;
-
-        mat.base_color_texture = match settings.texture {
-            TextureType::None => None,
-            other => proc_textures.textures.get(&other).cloned(),
-        };
-
-        mat.uv_transform = Affine2::from_scale(Vec2::splat(settings.uv_scale));
-    }
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -41,7 +41,8 @@ fn main() {
             Startup,
             (
                 visuals::scene::setup_scene,
-                visuals::assets::setup_turtle_assets,
+                bevy_symbios::materials::setup_material_assets,
+                visuals::assets::setup_prop_assets,
             ),
         )
         // UI
@@ -53,7 +54,7 @@ fn main() {
                 logic::derivation::start_derivation,
                 logic::derivation::poll_derivation,
                 visuals::turtle::render_turtle,
-                visuals::turtle::sync_material_properties,
+                bevy_symbios::materials::sync_material_properties,
                 visuals::export::batch_export_system,
             )
                 .chain(),

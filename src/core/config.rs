@@ -4,120 +4,15 @@ use bevy::prelude::*;
 use std::sync::{Arc, Mutex};
 use symbios::System;
 
-/// Explicit dirty flags for split reactivity.
+// Re-export material and export types from bevy_symbios for convenience.
+pub use bevy_symbios::export::ExportFormat;
+pub use bevy_symbios::materials::{MaterialSettings, MaterialSettingsMap, TextureType};
+
+/// Geometry dirty flag for split reactivity.
 /// Geometry dirty = requires derivation + remesh.
-/// Materials dirty = requires only material handle updates.
 #[derive(Resource, Default)]
 pub struct DirtyFlags {
     pub geometry: bool,
-    pub materials: bool,
-}
-
-/// Available procedural texture types for materials
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum TextureType {
-    #[default]
-    None,
-    Grid,
-    Noise,
-    Checker,
-}
-
-impl TextureType {
-    pub const ALL: &'static [TextureType] = &[
-        TextureType::None,
-        TextureType::Grid,
-        TextureType::Noise,
-        TextureType::Checker,
-    ];
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            TextureType::None => "None",
-            TextureType::Grid => "Grid",
-            TextureType::Noise => "Noise",
-            TextureType::Checker => "Checker",
-        }
-    }
-}
-
-/// Per-material settings for UI editing
-#[derive(Clone)]
-pub struct MaterialSettings {
-    pub base_color: [f32; 3],
-    pub emission_color: [f32; 3],
-    pub emission_strength: f32,
-    pub roughness: f32,
-    pub metallic: f32,
-    pub texture: TextureType,
-    pub uv_scale: f32,
-}
-
-impl Default for MaterialSettings {
-    fn default() -> Self {
-        Self {
-            base_color: [1.0, 1.0, 1.0],
-            emission_color: [0.0, 0.0, 0.0],
-            emission_strength: 0.0,
-            roughness: 0.5,
-            metallic: 0.0,
-            texture: TextureType::None,
-            uv_scale: 1.0,
-        }
-    }
-}
-
-/// Resource holding editable settings for each material ID
-#[derive(Resource)]
-pub struct MaterialSettingsMap {
-    pub settings: HashMap<u8, MaterialSettings>,
-}
-
-impl Default for MaterialSettingsMap {
-    fn default() -> Self {
-        let mut settings = HashMap::new();
-
-        settings.insert(
-            0,
-            MaterialSettings {
-                base_color: [0.2, 0.8, 0.2],
-                emission_color: [0.5, 1.0, 0.5],
-                emission_strength: 0.0,
-                roughness: 0.2,
-                metallic: 0.8,
-                texture: TextureType::None,
-                uv_scale: 1.0,
-            },
-        );
-
-        settings.insert(
-            1,
-            MaterialSettings {
-                base_color: [1.0, 1.0, 1.0],
-                emission_color: [0.0, 1.0, 1.0],
-                emission_strength: 2.0,
-                roughness: 0.1,
-                metallic: 0.0,
-                texture: TextureType::None,
-                uv_scale: 1.0,
-            },
-        );
-
-        settings.insert(
-            2,
-            MaterialSettings {
-                base_color: [0.5, 0.5, 0.5],
-                emission_color: [0.0, 0.0, 0.0],
-                emission_strength: 0.0,
-                roughness: 0.9,
-                metallic: 0.0,
-                texture: TextureType::None,
-                uv_scale: 1.0,
-            },
-        );
-
-        Self { settings }
-    }
 }
 
 /// Available prop mesh types for prop IDs
@@ -261,32 +156,6 @@ pub type SharedDerivationResult = Arc<Mutex<Option<Result<DerivationResult, Stri
 #[derive(Resource, Default)]
 pub struct DerivationTask {
     pub shared: Option<SharedDerivationResult>,
-}
-
-/// Export format options
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum ExportFormat {
-    #[default]
-    Obj,
-    Glb,
-}
-
-impl ExportFormat {
-    pub const ALL: &'static [ExportFormat] = &[ExportFormat::Obj, ExportFormat::Glb];
-
-    pub fn name(&self) -> &'static str {
-        match self {
-            ExportFormat::Obj => "OBJ",
-            ExportFormat::Glb => "GLB",
-        }
-    }
-
-    pub fn extension(&self) -> &'static str {
-        match self {
-            ExportFormat::Obj => "obj",
-            ExportFormat::Glb => "glb",
-        }
-    }
 }
 
 /// Configuration for batch export

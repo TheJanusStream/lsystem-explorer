@@ -1,6 +1,6 @@
 use crate::core::config::{
     DerivationDebounce, DerivationStatus, DirtyFlags, ExportConfig, ExportFormat, LSystemAnalysis,
-    LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType, TextureType,
+    LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType,
 };
 use crate::core::presets::PRESETS;
 use crate::visuals::turtle::TurtleRenderState;
@@ -220,94 +220,7 @@ pub fn ui_system(
 
                 // --- MATERIAL PALETTE ---
                 ui.collapsing("Material Palette", |ui| {
-                    let material_names = ["Mat 0 (Primary)", "Mat 1 (Energy)", "Mat 2 (Matte)"];
-
-                    for mat_id in 0u8..3 {
-                        let Some(current) = material_settings.settings.get(&mat_id).cloned() else {
-                            continue;
-                        };
-
-                        let mut local_base_color = current.base_color;
-                        let mut local_emission_color = current.emission_color;
-                        let mut local_emission_strength = current.emission_strength;
-                        let mut local_roughness = current.roughness;
-                        let mut local_metallic = current.metallic;
-                        let mut local_texture = current.texture;
-                        let mut local_uv_scale = current.uv_scale;
-
-                        let mut mat_changed = false;
-
-                        ui.collapsing(material_names[mat_id as usize], |ui| {
-                            ui.horizontal(|ui| {
-                                ui.label("Base Color:");
-                                mat_changed |=
-                                    ui.color_edit_button_rgb(&mut local_base_color).changed();
-                            });
-                            ui.horizontal(|ui| {
-                                ui.label("Emission:");
-                                mat_changed |= ui
-                                    .color_edit_button_rgb(&mut local_emission_color)
-                                    .changed();
-                            });
-                            mat_changed |= ui
-                                .add(
-                                    egui::Slider::new(&mut local_emission_strength, 0.0..=10.0)
-                                        .text("Glow"),
-                                )
-                                .changed();
-                            mat_changed |= ui
-                                .add(
-                                    egui::Slider::new(&mut local_roughness, 0.0..=1.0)
-                                        .text("Roughness"),
-                                )
-                                .changed();
-                            mat_changed |= ui
-                                .add(
-                                    egui::Slider::new(&mut local_metallic, 0.0..=1.0)
-                                        .text("Metallic"),
-                                )
-                                .changed();
-                            mat_changed |= ui
-                                .add(
-                                    egui::Slider::new(&mut local_uv_scale, 0.1..=10.0)
-                                        .text("UV Scale"),
-                                )
-                                .changed();
-
-                            ui.horizontal(|ui| {
-                                ui.label("Texture:");
-                                egui::ComboBox::from_id_salt(format!("mat_tex_{}", mat_id))
-                                    .selected_text(local_texture.name())
-                                    .show_ui(ui, |ui| {
-                                        for tex_type in TextureType::ALL {
-                                            if ui
-                                                .selectable_label(
-                                                    local_texture == *tex_type,
-                                                    tex_type.name(),
-                                                )
-                                                .clicked()
-                                            {
-                                                local_texture = *tex_type;
-                                                mat_changed = true;
-                                            }
-                                        }
-                                    });
-                            });
-                        });
-
-                        if mat_changed
-                            && let Some(settings) = material_settings.settings.get_mut(&mat_id)
-                        {
-                            settings.base_color = local_base_color;
-                            settings.emission_color = local_emission_color;
-                            settings.emission_strength = local_emission_strength;
-                            settings.roughness = local_roughness;
-                            settings.metallic = local_metallic;
-                            settings.texture = local_texture;
-                            settings.uv_scale = local_uv_scale;
-                            dirty.materials = true;
-                        }
-                    }
+                    bevy_symbios::ui::material_palette_editor(ui, &mut material_settings.settings);
                 });
 
                 ui.collapsing("Prop Settings", |ui| {

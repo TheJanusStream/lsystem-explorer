@@ -35,8 +35,11 @@ pub fn setup_headless_app() -> App {
     // Mock the asset setup usually done in main.rs
     // run_system_once takes the function directly
     app.world_mut()
-        .run_system_once(lsystem_explorer::visuals::assets::setup_turtle_assets)
-        .expect("Failed to run setup assets");
+        .run_system_once(bevy_symbios::materials::setup_material_assets)
+        .expect("Failed to run setup material assets");
+    app.world_mut()
+        .run_system_once(lsystem_explorer::visuals::assets::setup_prop_assets)
+        .expect("Failed to run setup prop assets");
 
     app
 }
