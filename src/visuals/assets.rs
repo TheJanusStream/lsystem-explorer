@@ -15,7 +15,7 @@ pub fn setup_prop_assets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>
     let mut prop_meshes = HashMap::new();
 
     // Leaf: Flattened cuboid
-    prop_meshes.insert(PropMeshType::Leaf, meshes.add(Cuboid::new(0.5, 0.8, 0.02)));
+    prop_meshes.insert(PropMeshType::Leaf, meshes.add(Cuboid::new(0.5, 0.8, 0.0)));
 
     // Sphere: Ico-sphere
     prop_meshes.insert(

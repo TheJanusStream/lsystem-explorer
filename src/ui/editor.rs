@@ -35,97 +35,106 @@ pub fn ui_system(
         egui::Window::new("Symbios Lab")
             .default_width(350.0)
             .show(ctx, |ui| {
-                // --- PRESETS ---
-                egui::containers::Sides::new().show(
-                    ui,
-                    |ui| {
-                        ui.heading("Grammar:");
-                    },
-                    |ui| {
-                        egui::ComboBox::from_id_salt("preset_combo")
-                            .selected_text("Presets...")
-                            .show_ui(ui, |ui| {
-                                for preset in PRESETS {
-                                    if ui.selectable_label(false, preset.name).clicked() {
-                                        config.source_code = preset.code.to_string();
-                                        config.iterations = preset.iterations;
-                                        config.default_angle = preset.angle;
-                                        config.step_size = preset.step;
-                                        config.default_width = preset.width;
-                                        config.elasticity = preset.elasticity;
-                                        config.tropism = preset.tropism;
-                                        config.recompile_requested = true;
-                                        debounce.pending = false;
+                // --- GRAMMAR (Collapsible) ---
+                egui::CollapsingHeader::new("Grammar")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        // Presets dropdown aligned right
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
+                            egui::ComboBox::from_id_salt("preset_combo")
+                                .selected_text("Presets...")
+                                .show_ui(ui, |ui| {
+                                    for preset in PRESETS {
+                                        if ui.selectable_label(false, preset.name).clicked() {
+                                            config.source_code = preset.code.to_string();
+                                            config.iterations = preset.iterations;
+                                            config.default_angle = preset.angle;
+                                            config.step_size = preset.step;
+                                            config.default_width = preset.width;
+                                            config.elasticity = preset.elasticity;
+                                            config.tropism = preset.tropism;
+                                            config.recompile_requested = true;
+                                            debounce.pending = false;
+                                        }
                                     }
+                                });
+                        });
+
+                        ui.add_space(5.0);
+
+                        // Editor with full available width
+                        egui::ScrollArea::vertical()
+                            .min_scrolled_height(200.0)
+                            .id_salt("source_scroll")
+                            .show(ui, |ui| {
+                                let response = ui.add(
+                                    egui::TextEdit::multiline(&mut config.source_code)
+                                        .code_editor()
+                                        .desired_width(f32::INFINITY)
+                                        .layouter(&mut |ui, text, wrap_width| {
+                                            let font_id =
+                                                egui::TextStyle::Monospace.resolve(ui.style());
+                                            let mut job = highlight_lsystem(text.as_str(), font_id);
+                                            job.wrap.max_width = wrap_width;
+                                            ui.ctx().fonts_mut(|f| f.layout_job(job))
+                                        }),
+                                );
+                                if response.changed() && config.auto_update {
+                                    debounce.timer.reset();
+                                    debounce.pending = true;
                                 }
                             });
-                    },
-                );
-
-                ui.add_space(5.0);
-
-                // --- EDITOR ---
-                egui::ScrollArea::vertical()
-                    .min_scrolled_height(200.0)
-                    .id_salt("source_scroll")
-                    .show(ui, |ui| {
-                        let response = ui.add(
-                            egui::TextEdit::multiline(&mut config.source_code)
-                                .code_editor()
-                                .layouter(&mut |ui, text, wrap_width| {
-                                    let font_id = egui::TextStyle::Monospace.resolve(ui.style());
-                                    let mut job = highlight_lsystem(text.as_str(), font_id);
-                                    job.wrap.max_width = wrap_width;
-                                    ui.ctx().fonts_mut(|f| f.layout_job(job))
-                                }),
-                        );
-                        if response.changed() && config.auto_update {
-                            debounce.timer.reset();
-                            debounce.pending = true;
-                        }
                     });
 
                 ui.add_space(5.0);
-                ui.separator();
 
-                // --- DEFINED CONSTANTS ---
+                // --- DEFINED CONSTANTS (Collapsible) ---
                 let sys = &engine.0;
                 if !sys.constants.is_empty() {
-                    ui.heading("Defined Constants:");
+                    egui::CollapsingHeader::new("Defined Constants")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            let mut keys: Vec<String> = sys.constants.keys().cloned().collect();
+                            keys.sort();
 
-                    let mut keys: Vec<String> = sys.constants.keys().cloned().collect();
-                    keys.sort();
+                            let mut constants_changed = false;
+                            let available_width = ui.available_width();
 
-                    let mut constants_changed = false;
+                            for key in keys {
+                                if let Some(&current_val) = sys.constants.get(&key) {
+                                    let mut val_f32 = current_val as f32;
+                                    let (lo, hi) = smart_slider_range(val_f32);
 
-                    for key in keys {
-                        if let Some(&current_val) = sys.constants.get(&key) {
-                            let mut val_f32 = current_val as f32;
-                            let (lo, hi) = smart_slider_range(val_f32);
-
-                            if ui
-                                .add(
-                                    egui::Slider::new(&mut val_f32, lo..=hi)
-                                        .text(&key)
-                                        .clamping(egui::SliderClamping::Never),
-                                )
-                                .changed()
-                            {
-                                let new_source =
-                                    update_define_in_source(&config.source_code, &key, val_f32);
-                                config.source_code = new_source;
-                                constants_changed = true;
+                                    ui.horizontal(|ui| {
+                                        ui.set_min_width(available_width);
+                                        if ui
+                                            .add_sized(
+                                                [available_width, ui.spacing().interact_size.y],
+                                                egui::Slider::new(&mut val_f32, lo..=hi)
+                                                    .text(&key)
+                                                    .clamping(egui::SliderClamping::Never),
+                                            )
+                                            .changed()
+                                        {
+                                            let new_source = update_define_in_source(
+                                                &config.source_code,
+                                                &key,
+                                                val_f32,
+                                            );
+                                            config.source_code = new_source;
+                                            constants_changed = true;
+                                        }
+                                    });
+                                }
                             }
-                        }
-                    }
 
-                    if constants_changed {
-                        config.recompile_requested = true;
-                        debounce.pending = false;
-                    }
+                            if constants_changed {
+                                config.recompile_requested = true;
+                                debounce.pending = false;
+                            }
+                        });
 
                     ui.add_space(5.0);
-                    ui.separator();
                 }
 
                 // --- INTERPRETATION SETTINGS ---
