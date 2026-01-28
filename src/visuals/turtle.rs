@@ -118,7 +118,7 @@ pub fn render_turtle(
     for prop in &skeleton.props {
         let mesh_type = prop_config
             .prop_meshes
-            .get(&prop.surface_id)
+            .get(&prop.prop_id)
             .copied()
             .unwrap_or(PropMeshType::Leaf);
 
