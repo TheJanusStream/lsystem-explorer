@@ -105,6 +105,8 @@ pub struct LSystemAnalysis {
     pub uses_implicit_step: bool,
     pub uses_implicit_angle: bool,
     pub uses_explicit_width: bool,
+    /// Maximum material ID referenced in the source code.
+    pub max_material_id: u8,
 }
 
 /// The persistent Symbios engine

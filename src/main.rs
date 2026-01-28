@@ -6,7 +6,7 @@ use lsystem_explorer::core::config::{
     DerivationDebounce, DerivationStatus, DerivationTask, DirtyFlags, ExportConfig,
     LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig,
 };
-use lsystem_explorer::visuals::turtle::TurtleRenderState;
+use lsystem_explorer::visuals::turtle::{PropMaterialCache, TurtleRenderState};
 use lsystem_explorer::{logic, ui, visuals};
 
 fn main() {
@@ -36,6 +36,7 @@ fn main() {
         .init_resource::<MaterialSettingsMap>()
         .init_resource::<ExportConfig>()
         .init_resource::<TurtleRenderState>()
+        .init_resource::<PropMaterialCache>()
         // Startup
         .add_systems(
             Startup,
@@ -53,8 +54,10 @@ fn main() {
             (
                 logic::derivation::start_derivation,
                 logic::derivation::poll_derivation,
+                logic::derivation::ensure_material_palette_size,
                 visuals::turtle::render_turtle,
                 bevy_symbios::materials::sync_material_properties,
+                visuals::turtle::sync_prop_materials,
                 visuals::export::batch_export_system,
             )
                 .chain(),

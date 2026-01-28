@@ -22,6 +22,9 @@ web-sys = { version = "0.3.82", features = [
     "Blob",
     "Url",
     "BlobPropertyBag",
+    "Clipboard",
+    "ClipboardEvent",
+    "Navigator",
 ] }
 wasm-bindgen = "0.2.106"
 js-sys = "0.3.82"

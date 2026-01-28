@@ -1,5 +1,43 @@
 use bevy::math::Vec3;
 
+/// Preset material configuration for material slot 0.
+#[derive(Clone, Copy)]
+pub struct PresetMaterial {
+    pub base_color: [f32; 3],
+    pub roughness: f32,
+    pub metallic: f32,
+}
+
+impl Default for PresetMaterial {
+    fn default() -> Self {
+        Self {
+            base_color: [0.55, 0.27, 0.07], // Brown wood color
+            roughness: 0.8,
+            metallic: 0.0,
+        }
+    }
+}
+
+/// Preset camera configuration.
+#[derive(Clone, Copy)]
+pub struct PresetCamera {
+    pub focus: Vec3,
+    pub distance: f32,
+    pub pitch: f32,
+    pub yaw: f32,
+}
+
+impl Default for PresetCamera {
+    fn default() -> Self {
+        Self {
+            focus: Vec3::new(0.0, 400.0, 0.0),
+            distance: 1200.0,
+            pitch: std::f32::consts::TAU / 64.0,
+            yaw: std::f32::consts::TAU / 5.0,
+        }
+    }
+}
+
 pub struct LSystemPreset {
     pub name: &'static str,
     pub code: &'static str,
@@ -9,6 +47,12 @@ pub struct LSystemPreset {
     pub width: f32,
     pub elasticity: f32,
     pub tropism: Option<Vec3>,
+    /// Initial turtle color (RGB, 0-1 range).
+    pub initial_color: Option<[f32; 3]>,
+    /// Primary material settings override.
+    pub material: Option<PresetMaterial>,
+    /// Camera settings override.
+    pub camera: Option<PresetCamera>,
 }
 
 pub const PRESETS: &[LSystemPreset] = &[
@@ -21,6 +65,13 @@ pub const PRESETS: &[LSystemPreset] = &[
         width: 0.1,
         elasticity: 0.0,
         tropism: None,
+        initial_color: None,
+        material: Some(PresetMaterial {
+            base_color: [0.55, 0.27, 0.07],
+            roughness: 0.8,
+            metallic: 0.0,
+        }),
+        camera: None,
     },
     LSystemPreset {
         name: "Sympodial Tree (ABOP Fig 2.7)",
@@ -31,6 +82,13 @@ pub const PRESETS: &[LSystemPreset] = &[
         width: 0.1,
         elasticity: 0.0,
         tropism: None,
+        initial_color: None,
+        material: Some(PresetMaterial {
+            base_color: [0.4, 0.25, 0.1],
+            roughness: 0.75,
+            metallic: 0.0,
+        }),
+        camera: None,
     },
     LSystemPreset {
         name: "Ternary Tree (ABOP Fig 2.8)",
@@ -41,6 +99,18 @@ pub const PRESETS: &[LSystemPreset] = &[
         width: 0.1,
         elasticity: 0.0,
         tropism: None,
+        initial_color: None,
+        material: Some(PresetMaterial {
+            base_color: [0.35, 0.2, 0.08],
+            roughness: 0.85,
+            metallic: 0.0,
+        }),
+        camera: Some(PresetCamera {
+            focus: Vec3::new(0.0, 600.0, 0.0),
+            distance: 1800.0,
+            pitch: std::f32::consts::TAU / 64.0,
+            yaw: std::f32::consts::TAU / 5.0,
+        }),
     },
     LSystemPreset {
         name: "Ternary Tree (Gravity) (ABOP Fig 2.8d)",
@@ -51,6 +121,18 @@ pub const PRESETS: &[LSystemPreset] = &[
         width: 0.1,
         elasticity: 0.40,
         tropism: Some(Vec3::new(0.0, -1.0, 0.0)),
+        initial_color: None,
+        material: Some(PresetMaterial {
+            base_color: [0.35, 0.2, 0.08],
+            roughness: 0.85,
+            metallic: 0.0,
+        }),
+        camera: Some(PresetCamera {
+            focus: Vec3::new(0.0, 500.0, 0.0),
+            distance: 1500.0,
+            pitch: std::f32::consts::TAU / 64.0,
+            yaw: std::f32::consts::TAU / 5.0,
+        }),
     },
     LSystemPreset {
         name: "Stochastic Bush",
@@ -61,6 +143,18 @@ pub const PRESETS: &[LSystemPreset] = &[
         width: 2.0,
         elasticity: 0.0,
         tropism: None,
+        initial_color: Some([0.2, 0.5, 0.15]),
+        material: Some(PresetMaterial {
+            base_color: [0.2, 0.5, 0.15],
+            roughness: 0.7,
+            metallic: 0.0,
+        }),
+        camera: Some(PresetCamera {
+            focus: Vec3::new(0.0, 50.0, 0.0),
+            distance: 300.0,
+            pitch: std::f32::consts::TAU / 64.0,
+            yaw: std::f32::consts::TAU / 5.0,
+        }),
     },
     LSystemPreset {
         name: "Quadratic Koch Island",
@@ -71,6 +165,18 @@ pub const PRESETS: &[LSystemPreset] = &[
         width: 1.0,
         elasticity: 0.0,
         tropism: None,
+        initial_color: Some([0.3, 0.6, 0.9]),
+        material: Some(PresetMaterial {
+            base_color: [0.3, 0.6, 0.9],
+            roughness: 0.3,
+            metallic: 0.5,
+        }),
+        camera: Some(PresetCamera {
+            focus: Vec3::new(0.0, 0.0, 0.0),
+            distance: 500.0,
+            pitch: -std::f32::consts::TAU / 4.0,
+            yaw: 0.0,
+        }),
     },
     LSystemPreset {
         name: "Compound Leaves (ABOP Fig 5.11a)",
@@ -81,6 +187,18 @@ pub const PRESETS: &[LSystemPreset] = &[
         width: 0.05,
         elasticity: 0.0,
         tropism: None,
+        initial_color: Some([0.15, 0.4, 0.1]),
+        material: Some(PresetMaterial {
+            base_color: [0.15, 0.4, 0.1],
+            roughness: 0.6,
+            metallic: 0.0,
+        }),
+        camera: Some(PresetCamera {
+            focus: Vec3::new(0.0, 100.0, 0.0),
+            distance: 400.0,
+            pitch: std::f32::consts::TAU / 64.0,
+            yaw: std::f32::consts::TAU / 5.0,
+        }),
     },
     LSystemPreset {
         name: "Compound Leaves (Alternating) (ABOP Fig 5.12a)",
@@ -91,6 +209,18 @@ pub const PRESETS: &[LSystemPreset] = &[
         width: 0.05,
         elasticity: 0.0,
         tropism: None,
+        initial_color: Some([0.15, 0.45, 0.1]),
+        material: Some(PresetMaterial {
+            base_color: [0.15, 0.45, 0.1],
+            roughness: 0.6,
+            metallic: 0.0,
+        }),
+        camera: Some(PresetCamera {
+            focus: Vec3::new(0.0, 80.0, 0.0),
+            distance: 350.0,
+            pitch: std::f32::consts::TAU / 64.0,
+            yaw: std::f32::consts::TAU / 5.0,
+        }),
     },
     LSystemPreset {
         name: "PBR Tech-Tree",
@@ -101,5 +231,17 @@ pub const PRESETS: &[LSystemPreset] = &[
         width: 0.1,
         elasticity: 0.1,
         tropism: Some(Vec3::new(0.0, -0.5, 0.0)),
+        initial_color: Some([0.9, 0.9, 0.9]),
+        material: Some(PresetMaterial {
+            base_color: [0.8, 0.8, 0.85],
+            roughness: 0.2,
+            metallic: 1.0,
+        }),
+        camera: Some(PresetCamera {
+            focus: Vec3::new(0.0, 150.0, 0.0),
+            distance: 600.0,
+            pitch: std::f32::consts::TAU / 64.0,
+            yaw: std::f32::consts::TAU / 5.0,
+        }),
     },
 ];

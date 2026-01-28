@@ -1,6 +1,6 @@
 use crate::core::config::{
     DerivationResult, DerivationStatus, DerivationTask, DirtyFlags, LSystemAnalysis, LSystemConfig,
-    LSystemEngine,
+    LSystemEngine, MaterialSettingsMap,
 };
 use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
@@ -74,6 +74,21 @@ pub fn poll_derivation(
     }
 }
 
+/// Ensures the MaterialSettingsMap has slots for all material IDs up to max_material_id.
+/// Adds default entries for any missing slots.
+pub fn ensure_material_palette_size(
+    analysis: Res<LSystemAnalysis>,
+    mut material_settings: ResMut<MaterialSettingsMap>,
+) {
+    if !analysis.is_changed() {
+        return;
+    }
+
+    for id in 0..=analysis.max_material_id {
+        material_settings.settings.entry(id).or_default();
+    }
+}
+
 /// Performs L-system parsing and derivation. Runs on a background thread.
 fn perform_derivation(source: &str, iterations: usize) -> Result<DerivationResult, String> {
     let start_time = std::time::Instant::now();
@@ -97,6 +112,9 @@ fn perform_derivation(source: &str, iterations: usize) -> Result<DerivationResul
             }
         }
     };
+
+    // Scan source for material ID usage: ,(N) pattern
+    analysis.max_material_id = scan_max_material_id(source);
 
     let lines: Vec<&str> = source.lines().collect();
 
@@ -163,4 +181,36 @@ fn perform_derivation(source: &str, iterations: usize) -> Result<DerivationResul
         analysis,
         derivation_time_ms: start_time.elapsed().as_secs_f32() * 1000.0,
     })
+}
+
+/// Scans source code for material ID usage patterns: `,(N)` where N is a number.
+/// Returns the maximum material ID found, or 0 if none.
+fn scan_max_material_id(source: &str) -> u8 {
+    let mut max_id: u8 = 0;
+    let bytes = source.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        // Look for `,` followed by `(`
+        if bytes[i] == b',' && i + 1 < bytes.len() && bytes[i + 1] == b'(' {
+            i += 2; // Skip `,(`
+
+            // Parse the number
+            let start = i;
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+
+            if let Some(num) = std::str::from_utf8(&bytes[start..i])
+                .ok()
+                .and_then(|s| s.parse::<u8>().ok())
+            {
+                max_id = max_id.max(num);
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    max_id
 }

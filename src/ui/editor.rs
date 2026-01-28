@@ -21,6 +21,7 @@ pub fn ui_system(
     analysis: Res<LSystemAnalysis>,
     render_state: Res<TurtleRenderState>,
     time: Res<Time>,
+    mut camera_query: Query<&mut bevy_panorbit_camera::PanOrbitCamera>,
 ) {
     // Handle Debounce
     if debounce.pending {
@@ -53,6 +54,30 @@ pub fn ui_system(
                                             config.default_width = preset.width;
                                             config.elasticity = preset.elasticity;
                                             config.tropism = preset.tropism;
+
+                                            // Apply preset material settings
+                                            if let Some((mat, settings)) = preset
+                                                .material
+                                                .as_ref()
+                                                .zip(material_settings.settings.get_mut(&0))
+                                            {
+                                                settings.base_color = mat.base_color;
+                                                settings.roughness = mat.roughness;
+                                                settings.metallic = mat.metallic;
+                                            }
+
+                                            // Apply preset camera settings
+                                            if let Some((cam, mut pan_orbit)) = preset
+                                                .camera
+                                                .as_ref()
+                                                .zip(camera_query.single_mut().ok())
+                                            {
+                                                pan_orbit.focus = cam.focus;
+                                                pan_orbit.radius = Some(cam.distance);
+                                                pan_orbit.pitch = Some(cam.pitch);
+                                                pan_orbit.yaw = Some(cam.yaw);
+                                            }
+
                                             config.recompile_requested = true;
                                             debounce.pending = false;
                                         }
