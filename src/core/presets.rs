@@ -1,5 +1,7 @@
 use bevy::math::Vec3;
 
+use crate::core::config::TextureType;
+
 /// Preset material configuration for material slot 0.
 #[derive(Clone, Copy)]
 pub struct PresetMaterial {
@@ -9,6 +11,7 @@ pub struct PresetMaterial {
     pub emission_color: [f32; 3],
     pub emission_strength: f32,
     pub uv_scale: f32,
+    pub texture_type: TextureType,
 }
 
 impl Default for PresetMaterial {
@@ -20,6 +23,7 @@ impl Default for PresetMaterial {
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
         }
     }
 }
@@ -79,6 +83,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
         }),
         camera: None,
     },
@@ -99,6 +104,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
         }),
         camera: None,
     },
@@ -119,6 +125,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 600.0, 0.0),
@@ -144,6 +151,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 500.0, 0.0),
@@ -169,6 +177,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 50.0, 0.0),
@@ -194,6 +203,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 0.0, 0.0),
@@ -219,6 +229,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 100.0, 0.0),
@@ -244,6 +255,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 80.0, 0.0),
@@ -269,6 +281,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 150.0, 0.0),

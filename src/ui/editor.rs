@@ -68,6 +68,7 @@ pub fn ui_system(
                                                 settings.emission_color = mat.emission_color;
                                                 settings.emission_strength = mat.emission_strength;
                                                 settings.uv_scale = mat.uv_scale;
+                                                settings.texture = mat.texture_type;
                                             }
 
                                             // Apply preset camera settings
