@@ -76,6 +76,9 @@ pub struct LSystemConfig {
     pub tropism: Option<Vec3>,
     pub elasticity: f32,
 
+    /// Random seed for stochastic L-systems.
+    pub seed: u64,
+
     pub recompile_requested: bool,
     pub auto_update: bool,
 }
@@ -93,6 +96,8 @@ impl Default for LSystemConfig {
 
             tropism: None,
             elasticity: 0.0,
+
+            seed: 42,
 
             recompile_requested: true,
             auto_update: true,

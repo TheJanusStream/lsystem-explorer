@@ -6,6 +6,9 @@ pub struct PresetMaterial {
     pub base_color: [f32; 3],
     pub roughness: f32,
     pub metallic: f32,
+    pub emission_color: [f32; 3],
+    pub emission_strength: f32,
+    pub uv_scale: f32,
 }
 
 impl Default for PresetMaterial {
@@ -14,6 +17,9 @@ impl Default for PresetMaterial {
             base_color: [0.55, 0.27, 0.07], // Brown wood color
             roughness: 0.8,
             metallic: 0.0,
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            uv_scale: 1.0,
         }
     }
 }
@@ -70,6 +76,9 @@ pub const PRESETS: &[LSystemPreset] = &[
             base_color: [0.55, 0.27, 0.07],
             roughness: 0.8,
             metallic: 0.0,
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            uv_scale: 1.0,
         }),
         camera: None,
     },
@@ -87,6 +96,9 @@ pub const PRESETS: &[LSystemPreset] = &[
             base_color: [0.4, 0.25, 0.1],
             roughness: 0.75,
             metallic: 0.0,
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            uv_scale: 1.0,
         }),
         camera: None,
     },
@@ -104,6 +116,9 @@ pub const PRESETS: &[LSystemPreset] = &[
             base_color: [0.35, 0.2, 0.08],
             roughness: 0.85,
             metallic: 0.0,
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            uv_scale: 1.0,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 600.0, 0.0),
@@ -126,6 +141,9 @@ pub const PRESETS: &[LSystemPreset] = &[
             base_color: [0.35, 0.2, 0.08],
             roughness: 0.85,
             metallic: 0.0,
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            uv_scale: 1.0,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 500.0, 0.0),
@@ -148,6 +166,9 @@ pub const PRESETS: &[LSystemPreset] = &[
             base_color: [0.2, 0.5, 0.15],
             roughness: 0.7,
             metallic: 0.0,
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            uv_scale: 1.0,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 50.0, 0.0),
@@ -170,6 +191,9 @@ pub const PRESETS: &[LSystemPreset] = &[
             base_color: [0.3, 0.6, 0.9],
             roughness: 0.3,
             metallic: 0.5,
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            uv_scale: 1.0,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 0.0, 0.0),
@@ -192,6 +216,9 @@ pub const PRESETS: &[LSystemPreset] = &[
             base_color: [0.15, 0.4, 0.1],
             roughness: 0.6,
             metallic: 0.0,
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            uv_scale: 1.0,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 100.0, 0.0),
@@ -214,6 +241,9 @@ pub const PRESETS: &[LSystemPreset] = &[
             base_color: [0.15, 0.45, 0.1],
             roughness: 0.6,
             metallic: 0.0,
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            uv_scale: 1.0,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 80.0, 0.0),
@@ -236,6 +266,9 @@ pub const PRESETS: &[LSystemPreset] = &[
             base_color: [0.8, 0.8, 0.85],
             roughness: 0.2,
             metallic: 1.0,
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            uv_scale: 1.0,
         }),
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 150.0, 0.0),

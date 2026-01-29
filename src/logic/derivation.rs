@@ -27,10 +27,11 @@ pub fn start_derivation(
 
     let source = config.source_code.clone();
     let iterations = config.iterations;
+    let seed = config.seed;
 
     let pool = AsyncComputeTaskPool::get();
     pool.spawn(async move {
-        let result = perform_derivation(&source, iterations);
+        let result = perform_derivation(&source, iterations, seed);
         if let Ok(mut guard) = shared.lock() {
             *guard = Some(result);
         }
@@ -90,9 +91,14 @@ pub fn ensure_material_palette_size(
 }
 
 /// Performs L-system parsing and derivation. Runs on a background thread.
-fn perform_derivation(source: &str, iterations: usize) -> Result<DerivationResult, String> {
+fn perform_derivation(
+    source: &str,
+    iterations: usize,
+    seed: u64,
+) -> Result<DerivationResult, String> {
     let start_time = std::time::Instant::now();
     let mut sys = System::new();
+    sys.set_seed(seed);
     let mut analysis = LSystemAnalysis::default();
     let mut axiom_set = false;
 

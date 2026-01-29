@@ -65,6 +65,9 @@ pub fn ui_system(
                                                 settings.base_color = mat.base_color;
                                                 settings.roughness = mat.roughness;
                                                 settings.metallic = mat.metallic;
+                                                settings.emission_color = mat.emission_color;
+                                                settings.emission_strength = mat.emission_strength;
+                                                settings.uv_scale = mat.uv_scale;
                                             }
 
                                             // Apply preset camera settings
@@ -213,6 +216,16 @@ pub fn ui_system(
                         config.iterations += 1;
                         config.recompile_requested = true;
                         debounce.pending = false;
+                    }
+                });
+
+                ui.horizontal(|ui| {
+                    ui.label("Random Seed:");
+                    if ui
+                        .add(egui::DragValue::new(&mut config.seed).speed(1.0))
+                        .changed()
+                    {
+                        config.recompile_requested = true;
                     }
                 });
 
