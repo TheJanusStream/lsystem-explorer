@@ -68,15 +68,14 @@ pub fn ui_system(
                                             }
 
                                             // Apply preset camera settings
-                                            if let Some((cam, mut pan_orbit)) = preset
-                                                .camera
-                                                .as_ref()
-                                                .zip(camera_query.single_mut().ok())
-                                            {
-                                                pan_orbit.focus = cam.focus;
-                                                pan_orbit.radius = Some(cam.distance);
-                                                pan_orbit.pitch = Some(cam.pitch);
-                                                pan_orbit.yaw = Some(cam.yaw);
+                                            if let Some(cam) = preset.camera {
+                                                for mut pan_orbit in camera_query.iter_mut() {
+                                                    pan_orbit.target_focus = cam.focus;
+                                                    pan_orbit.target_radius = cam.distance;
+                                                    pan_orbit.target_pitch = cam.pitch;
+                                                    pan_orbit.target_yaw = cam.yaw;
+                                                    pan_orbit.force_update = true;
+                                                }
                                             }
 
                                             config.recompile_requested = true;
