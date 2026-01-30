@@ -321,6 +321,7 @@ pub fn batch_export_system(
             initial_width,
             tropism: lsystem_config.tropism,
             elasticity: lsystem_config.elasticity,
+            max_stack_depth: 1024
         };
 
         let mut interpreter = TurtleInterpreter::new(turtle_config);

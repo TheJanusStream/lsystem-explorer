@@ -155,6 +155,7 @@ pub fn render_turtle(
         initial_width,
         tropism: config.tropism,
         elasticity: config.elasticity,
+        max_stack_depth: 1024,
     };
 
     let mut interpreter = TurtleInterpreter::new(turtle_config);
