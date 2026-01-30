@@ -59,8 +59,8 @@ pub struct LSystemPreset {
     pub tropism: Option<Vec3>,
     /// Initial turtle color (RGB, 0-1 range).
     pub initial_color: Option<[f32; 3]>,
-    /// Primary material settings override.
-    pub material: Option<PresetMaterial>,
+    /// Material settings for each material slot (slot_id, material).
+    pub materials: &'static [(u8, PresetMaterial)],
     /// Camera settings override.
     pub camera: Option<PresetCamera>,
 }
@@ -76,7 +76,7 @@ pub const PRESETS: &[LSystemPreset] = &[
         elasticity: 0.0,
         tropism: None,
         initial_color: None,
-        material: Some(PresetMaterial {
+        materials: &[(0, PresetMaterial {
             base_color: [0.55, 0.27, 0.07],
             roughness: 0.8,
             metallic: 0.0,
@@ -84,7 +84,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_strength: 0.0,
             uv_scale: 1.0,
             texture_type: TextureType::None,
-        }),
+        })],
         camera: None,
     },
     LSystemPreset {
@@ -97,7 +97,7 @@ pub const PRESETS: &[LSystemPreset] = &[
         elasticity: 0.0,
         tropism: None,
         initial_color: None,
-        material: Some(PresetMaterial {
+        materials: &[(0, PresetMaterial {
             base_color: [0.4, 0.25, 0.1],
             roughness: 0.75,
             metallic: 0.0,
@@ -105,7 +105,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_strength: 0.0,
             uv_scale: 1.0,
             texture_type: TextureType::None,
-        }),
+        })],
         camera: None,
     },
     LSystemPreset {
@@ -118,7 +118,7 @@ pub const PRESETS: &[LSystemPreset] = &[
         elasticity: 0.0,
         tropism: None,
         initial_color: None,
-        material: Some(PresetMaterial {
+        materials: &[(0, PresetMaterial {
             base_color: [0.35, 0.2, 0.08],
             roughness: 0.85,
             metallic: 0.0,
@@ -126,7 +126,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_strength: 0.0,
             uv_scale: 1.0,
             texture_type: TextureType::None,
-        }),
+        })],
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 600.0, 0.0),
             distance: 1800.0,
@@ -144,7 +144,7 @@ pub const PRESETS: &[LSystemPreset] = &[
         elasticity: 0.40,
         tropism: Some(Vec3::new(0.0, -1.0, 0.0)),
         initial_color: None,
-        material: Some(PresetMaterial {
+        materials: &[(0, PresetMaterial {
             base_color: [0.35, 0.2, 0.08],
             roughness: 0.85,
             metallic: 0.0,
@@ -152,7 +152,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_strength: 0.0,
             uv_scale: 1.0,
             texture_type: TextureType::None,
-        }),
+        })],
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 500.0, 0.0),
             distance: 1500.0,
@@ -170,7 +170,7 @@ pub const PRESETS: &[LSystemPreset] = &[
         elasticity: 0.0,
         tropism: None,
         initial_color: Some([0.2, 0.5, 0.15]),
-        material: Some(PresetMaterial {
+        materials: &[(0, PresetMaterial {
             base_color: [0.2, 0.5, 0.15],
             roughness: 0.7,
             metallic: 0.0,
@@ -178,7 +178,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_strength: 0.0,
             uv_scale: 1.0,
             texture_type: TextureType::None,
-        }),
+        })],
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 50.0, 0.0),
             distance: 300.0,
@@ -196,7 +196,7 @@ pub const PRESETS: &[LSystemPreset] = &[
         elasticity: 0.0,
         tropism: None,
         initial_color: Some([0.3, 0.6, 0.9]),
-        material: Some(PresetMaterial {
+        materials: &[(0, PresetMaterial {
             base_color: [0.3, 0.6, 0.9],
             roughness: 0.3,
             metallic: 0.5,
@@ -204,7 +204,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_strength: 0.0,
             uv_scale: 1.0,
             texture_type: TextureType::None,
-        }),
+        })],
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 0.0, 0.0),
             distance: 500.0,
@@ -222,7 +222,7 @@ pub const PRESETS: &[LSystemPreset] = &[
         elasticity: 0.0,
         tropism: None,
         initial_color: Some([0.15, 0.4, 0.1]),
-        material: Some(PresetMaterial {
+        materials: &[(0, PresetMaterial {
             base_color: [0.15, 0.4, 0.1],
             roughness: 0.6,
             metallic: 0.0,
@@ -230,7 +230,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_strength: 0.0,
             uv_scale: 1.0,
             texture_type: TextureType::None,
-        }),
+        })],
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 100.0, 0.0),
             distance: 400.0,
@@ -248,7 +248,7 @@ pub const PRESETS: &[LSystemPreset] = &[
         elasticity: 0.0,
         tropism: None,
         initial_color: Some([0.15, 0.45, 0.1]),
-        material: Some(PresetMaterial {
+        materials: &[(0, PresetMaterial {
             base_color: [0.15, 0.45, 0.1],
             roughness: 0.6,
             metallic: 0.0,
@@ -256,7 +256,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             emission_strength: 0.0,
             uv_scale: 1.0,
             texture_type: TextureType::None,
-        }),
+        })],
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 80.0, 0.0),
             distance: 350.0,
@@ -274,15 +274,28 @@ pub const PRESETS: &[LSystemPreset] = &[
         elasticity: 0.1,
         tropism: Some(Vec3::new(0.0, -0.5, 0.0)),
         initial_color: Some([0.9, 0.9, 0.9]),
-        material: Some(PresetMaterial {
-            base_color: [0.8, 0.8, 0.85],
-            roughness: 0.2,
-            metallic: 1.0,
-            emission_color: [0.0, 0.0, 0.0],
-            emission_strength: 0.0,
-            uv_scale: 1.0,
-            texture_type: TextureType::None,
-        }),
+        materials: &[
+            // Material 0: Metal Trunk (Silver)
+            (0, PresetMaterial {
+                base_color: [0.8, 0.8, 0.85],
+                roughness: 0.2,
+                metallic: 1.0,
+                emission_color: [0.0, 0.0, 0.0],
+                emission_strength: 0.0,
+                uv_scale: 1.0,
+                texture_type: TextureType::None,
+            }),
+            // Material 1: Energy/Glass (glowing branches)
+            (1, PresetMaterial {
+                base_color: [1.0, 0.6, 0.0],
+                roughness: 0.1,
+                metallic: 0.0,
+                emission_color: [1.0, 0.5, 0.0],
+                emission_strength: 2.0,
+                uv_scale: 1.0,
+                texture_type: TextureType::None,
+            }),
+        ],
         camera: Some(PresetCamera {
             focus: Vec3::new(0.0, 150.0, 0.0),
             distance: 600.0,

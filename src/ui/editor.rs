@@ -57,18 +57,20 @@ pub fn ui_system(
                                             config.tropism = preset.tropism;
 
                                             // Apply preset material settings
-                                            if let Some((mat, settings)) = preset
-                                                .material
-                                                .as_ref()
-                                                .zip(material_settings.settings.get_mut(&0))
-                                            {
-                                                settings.base_color = mat.base_color;
-                                                settings.roughness = mat.roughness;
-                                                settings.metallic = mat.metallic;
-                                                settings.emission_color = mat.emission_color;
-                                                settings.emission_strength = mat.emission_strength;
-                                                settings.uv_scale = mat.uv_scale;
-                                                settings.texture = mat.texture_type;
+                                            material_settings.settings.clear();
+                                            for (slot_id, mat) in preset.materials.iter() {
+                                                material_settings.settings.insert(
+                                                    *slot_id,
+                                                    bevy_symbios::materials::MaterialSettings {
+                                                        base_color: mat.base_color,
+                                                        roughness: mat.roughness,
+                                                        metallic: mat.metallic,
+                                                        emission_color: mat.emission_color,
+                                                        emission_strength: mat.emission_strength,
+                                                        uv_scale: mat.uv_scale,
+                                                        texture: mat.texture_type,
+                                                    },
+                                                );
                                             }
 
                                             // Apply preset camera settings
