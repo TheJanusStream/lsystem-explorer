@@ -110,7 +110,7 @@ fn perform_derivation(
     seed: u64,
     cancel_flag: &CancellationFlag,
 ) -> Result<DerivationResult, String> {
-    let start_time = std::time::Instant::now();
+    let start_time = chrono::Utc::now();
     let mut sys = System::new();
     sys.set_seed(seed);
     let mut analysis = LSystemAnalysis::default();
@@ -218,7 +218,7 @@ fn perform_derivation(
     Ok(DerivationResult {
         system: sys,
         analysis,
-        derivation_time_ms: start_time.elapsed().as_secs_f32() * 1000.0,
+        derivation_time_ms: (chrono::Utc::now() - start_time).num_milliseconds() as f32,
     })
 }
 

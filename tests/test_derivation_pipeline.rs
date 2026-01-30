@@ -38,7 +38,7 @@ fn test_async_derivation_flow() {
             done = true;
             break;
         }
-        std::thread::sleep(std::time::Duration::from_millis(10));
+        std::thread::sleep(chrono::Duration::milliseconds(10).to_std().unwrap());
     }
 
     assert!(done, "Derivation timed out");
