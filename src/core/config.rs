@@ -1,6 +1,7 @@
 use crate::core::presets::PRESETS;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use symbios::System;
 
@@ -79,6 +80,9 @@ pub struct LSystemConfig {
     /// Random seed for stochastic L-systems.
     pub seed: u64,
 
+    /// Resolution of procedural tube meshes (vertices per ring).
+    pub mesh_resolution: u32,
+
     pub recompile_requested: bool,
     pub auto_update: bool,
 }
@@ -98,6 +102,8 @@ impl Default for LSystemConfig {
             elasticity: 0.0,
 
             seed: 42,
+
+            mesh_resolution: 8,
 
             recompile_requested: true,
             auto_update: true,
@@ -159,11 +165,16 @@ pub struct DerivationResult {
 /// Type alias for the shared async derivation result container.
 pub type SharedDerivationResult = Arc<Mutex<Option<Result<DerivationResult, String>>>>;
 
+/// Shared cancellation flag for async derivation tasks.
+pub type CancellationFlag = Arc<AtomicBool>;
+
 /// Holds a reference to a pending async derivation result.
 /// The background task writes into the shared Arc<Mutex<Option<...>>> when complete.
 #[derive(Resource, Default)]
 pub struct DerivationTask {
     pub shared: Option<SharedDerivationResult>,
+    /// Cancellation flag for the current task. Set to false to cancel.
+    pub cancel_flag: Option<CancellationFlag>,
 }
 
 /// Configuration for batch export

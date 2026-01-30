@@ -232,6 +232,16 @@ pub fn ui_system(
                     }
                 });
 
+                if ui
+                    .add(
+                        egui::Slider::new(&mut config.mesh_resolution, 3..=32)
+                            .text("Mesh Resolution"),
+                    )
+                    .changed()
+                {
+                    dirty.geometry = true;
+                }
+
                 ui.collapsing("Physics & Tropism", |ui| {
                     if ui
                         .add(

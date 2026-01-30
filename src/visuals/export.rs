@@ -2,7 +2,9 @@ use bevy::mesh::{Indices, VertexAttributeValues};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 
-use crate::core::config::{ExportConfig, ExportFormat, LSystemConfig, MaterialSettingsMap, PropConfig};
+use crate::core::config::{
+    ExportConfig, ExportFormat, LSystemConfig, MaterialSettingsMap, PropConfig,
+};
 use crate::visuals::assets::PropMeshAssets;
 
 use bevy_symbios::LSystemMeshBuilder;
@@ -321,7 +323,7 @@ pub fn batch_export_system(
             initial_width,
             tropism: lsystem_config.tropism,
             elasticity: lsystem_config.elasticity,
-            max_stack_depth: 1024
+            max_stack_depth: 1024,
         };
 
         let mut interpreter = TurtleInterpreter::new(turtle_config);

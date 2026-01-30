@@ -1,14 +1,15 @@
 use crate::core::config::{
-    DerivationResult, DerivationStatus, DerivationTask, DirtyFlags, LSystemAnalysis, LSystemConfig,
-    LSystemEngine, MaterialSettingsMap,
+    CancellationFlag, DerivationResult, DerivationStatus, DerivationTask, DirtyFlags,
+    LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsMap,
 };
 use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 use symbios::System;
 
 /// Spawns an async derivation task when a recompile is requested.
-/// If a previous task is still running, it is abandoned (its result will be ignored).
+/// If a previous task is still running, it is signaled to cancel.
 pub fn start_derivation(
     mut config: ResMut<LSystemConfig>,
     mut task: ResMut<DerivationTask>,
@@ -21,9 +22,17 @@ pub fn start_derivation(
     status.error = None;
     status.generating = true;
 
-    // Abandon any in-progress task by dropping the old shared reference
+    // Signal any in-progress task to cancel
+    if let Some(old_flag) = &task.cancel_flag {
+        old_flag.store(false, Ordering::Relaxed);
+    }
+
+    // Create new shared result and cancellation flag
     let shared: Arc<Mutex<Option<Result<DerivationResult, String>>>> = Arc::new(Mutex::new(None));
+    let cancel_flag: CancellationFlag = Arc::new(std::sync::atomic::AtomicBool::new(true));
+
     task.shared = Some(shared.clone());
+    task.cancel_flag = Some(cancel_flag.clone());
 
     let source = config.source_code.clone();
     let iterations = config.iterations;
@@ -31,8 +40,11 @@ pub fn start_derivation(
 
     let pool = AsyncComputeTaskPool::get();
     pool.spawn(async move {
-        let result = perform_derivation(&source, iterations, seed);
-        if let Ok(mut guard) = shared.lock() {
+        let result = perform_derivation(&source, iterations, seed, &cancel_flag);
+        // Only store result if not cancelled
+        if cancel_flag.load(Ordering::Relaxed)
+            && let Ok(mut guard) = shared.lock()
+        {
             *guard = Some(result);
         }
     })
@@ -91,16 +103,21 @@ pub fn ensure_material_palette_size(
 }
 
 /// Performs L-system parsing and derivation. Runs on a background thread.
+/// Checks the cancellation flag periodically and aborts early if cancelled.
 fn perform_derivation(
     source: &str,
     iterations: usize,
     seed: u64,
+    cancel_flag: &CancellationFlag,
 ) -> Result<DerivationResult, String> {
     let start_time = std::time::Instant::now();
     let mut sys = System::new();
     sys.set_seed(seed);
     let mut analysis = LSystemAnalysis::default();
     let mut axiom_set = false;
+
+    // Helper to check if we should abort
+    let is_cancelled = || !cancel_flag.load(Ordering::Relaxed);
 
     let mut check_module = |symbol: &str, param_count: usize| {
         let step_syms = ["F", "f"];
@@ -125,6 +142,11 @@ fn perform_derivation(
     let lines: Vec<&str> = source.lines().collect();
 
     for (i, line) in lines.iter().enumerate() {
+        // Check cancellation periodically during parsing
+        if is_cancelled() {
+            return Err("Cancelled".to_string());
+        }
+
         let trimmed = line.trim();
         let line_num = i + 1;
 
@@ -176,8 +198,19 @@ fn perform_derivation(
     }
 
     if axiom_set {
-        sys.derive(iterations)
-            .map_err(|e| format!("Derivation error: {}", e))?;
+        // Check cancellation before expensive derivation
+        if is_cancelled() {
+            return Err("Cancelled".to_string());
+        }
+
+        // Derive one iteration at a time to allow cancellation checks
+        for _ in 0..iterations {
+            if is_cancelled() {
+                return Err("Cancelled".to_string());
+            }
+            sys.derive(1)
+                .map_err(|e| format!("Derivation error: {}", e))?;
+        }
     } else {
         return Err("No axiom defined".to_string());
     }

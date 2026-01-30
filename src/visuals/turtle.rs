@@ -165,7 +165,7 @@ pub fn render_turtle(
     let skeleton = interpreter.build_skeleton(&sys.state);
 
     // 4. Mesh Branches (Multi-Material Support)
-    let builder = LSystemMeshBuilder::new().with_resolution(8);
+    let builder = LSystemMeshBuilder::new().with_resolution(config.mesh_resolution);
     let mesh_buckets = builder.build(&skeleton);
 
     let mut total_verts = 0;
