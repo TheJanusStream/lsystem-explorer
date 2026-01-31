@@ -65,8 +65,8 @@ pub fn setup_scene(mut commands: Commands) {
             yaw: Some(TAU / 5.0),
             pitch: Some(TAU / 64.0),
             radius: Some(1200.0),
-            button_orbit: MouseButton::Middle,
-            button_pan: MouseButton::Right,
+            button_orbit: MouseButton::Right,
+            button_pan: MouseButton::Middle,
             ..default()
         },
         Camera3d::default(),
