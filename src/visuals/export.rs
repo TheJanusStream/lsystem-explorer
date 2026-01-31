@@ -261,6 +261,7 @@ pub fn batch_export_system(
 
     for variant_idx in 0..export_config.variation_count {
         let mut sys = System::new();
+        sys.set_seed(lsystem_config.seed.wrapping_add(variant_idx as u64));
 
         let source = &lsystem_config.source_code;
         let mut axiom_set = false;
