@@ -224,63 +224,11 @@ p1: A(s) : 0.5 -> F(s) [ + A(s*0.7) ] [ - A(s*0.7) ]
 p2: A(s) : 0.5 -> F(s) [ & A(s*0.7) ]
 ```
 
-## UI Controls
-
-### Grammar Panel
-- **Presets** - Load example L-systems from ABOP (Algorithmic Beauty of Plants)
-- **Code Editor** - Edit grammar with syntax highlighting
-- **Finalization (Decomposition)** - Optional second-pass rules applied after growth completes
-- **Defined Constants** - Drag sliders to adjust `#define` values in real-time
-
-### Interpretation
-- **Step** - Default forward distance (when `F` has no parameter)
-- **Angle** - Default turn angle in degrees
-- **Width** - Default branch width
-- **Iterations** - Derivation depth
-
-### Physics & Tropism
-- **Elasticity** - How much branches bend toward tropism vector (0-1)
-- **Tropism Vector** - Direction of gravitational influence
-
-### Material Palette
-Each material (0, 1, 2) can be edited independently with palette-first workflow. Changes to materials update in real-time without triggering geometry rebuild:
-- **Base Color** - Albedo color (tints vertex colors)
-- **Emission** - Glow color
-- **Glow Strength** - Emission intensity (0-10)
-- **Roughness** - Surface smoothness (0=mirror, 1=matte)
-- **Metallic** - Metalness (0=dielectric, 1=conductor)
-- **UV Scale** - Texture coordinate tiling multiplier (0.1-10)
-- **Texture** - Procedural texture type (None, Grid, Noise, Checker)
-
-### Prop Settings
-- **Prop Scale** - Global scale multiplier for all props
-- **Prop ID Mappings** - Assign mesh types to prop IDs
-
-### Batch Export
-- **Base Name** - Filename prefix for exports
-- **Variations** - Number of stochastic variants to generate
-- **Format** - OBJ (Wavefront) or GLB (binary glTF with PBR materials)
-- Files are saved to `./exports/` (native) or downloaded (WASM)
-
-GLB exports embed PBR material properties (base color, metallic, roughness, emission) and vertex colors directly in the file for import into Blender, Unity, Unreal, and other 3D tools.
-
 ## Camera Controls
 
-- **Middle Mouse + Drag** - Orbit camera
-- **Right Mouse + Drag** - Pan camera
+- **Middle Mouse + Drag** - Pan camera
+- **Right Mouse + Drag** - Orbit camera
 - **Scroll Wheel** - Zoom in/out
-
-## Materials
-
-The renderer provides three pre-configured materials in a palette-first workflow. Material tweaks (color, roughness, metallic, textures) update instantly via shader parameters without rebuilding geometry:
-
-| ID | Name | Default Use |
-|----|------|-------------|
-| 0 | Primary | Trunk/branches - metallic finish |
-| 1 | Energy | Leaves/details - emissive glow |
-| 2 | Matte | Structure - diffuse surface |
-
-Switch materials in grammar with `,(id)` command.
 
 ## Architecture
 
@@ -322,7 +270,3 @@ cargo build --target wasm32-unknown-unknown --release
 
 - [Prusinkiewicz & Lindenmayer, *The Algorithmic Beauty of Plants* (ABOP)](https://algorithmicbotany.org/papers/abop/abop.pdf)
 - [L-system Wikipedia](https://en.wikipedia.org/wiki/L-system)
-
-## License
-
-MIT
