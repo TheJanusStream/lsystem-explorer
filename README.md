@@ -259,12 +259,15 @@ cargo build --target wasm32-unknown-unknown --release
 
 ## Dependencies
 
-- [Bevy](https://bevyengine.org/) 0.17 - Game engine
+- [Bevy](https://bevyengine.org/) - Game engine
 - [bevy_egui](https://github.com/mvlabat/bevy_egui) - Immediate mode UI
 - [bevy_panorbit_camera](https://github.com/Plonq/bevy_panorbit_camera) - Camera controls
-- [symbios](https://github.com/codewright/symbios) - L-system parsing and derivation
-- [symbios-turtle-3d](https://github.com/codewright/symbios-turtle-3d) - 3D turtle interpreter
-- [bevy_symbios](https://github.com/codewright/bevy_symbios) - Bevy mesh generation, materials, and export
+
+### The crates L-System Explorer is meant to showcase
+
+- [symbios](https://github.com/TheJanusStream/symbios) - L-system parsing and derivation
+- [symbios-turtle-3d](https://github.com/TheJanusStream/symbios-turtle-3d) - 3D turtle interpreter
+- [bevy_symbios](https://github.com/TheJanusStream/bevy_symbios) - Bevy mesh generation, materials, and export
 
 ## References
 
