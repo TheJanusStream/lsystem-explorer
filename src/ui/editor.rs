@@ -1,6 +1,6 @@
 use crate::core::config::{
     DerivationDebounce, DerivationStatus, DirtyFlags, ExportConfig, ExportFormat, LSystemAnalysis,
-    LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType,
+    LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType, split_source_code,
 };
 use crate::core::presets::PRESETS;
 use crate::ui::editor_utils::{highlight_lsystem, smart_slider_range, update_define_in_source};
@@ -48,7 +48,11 @@ pub fn ui_system(
                                 .show_ui(ui, |ui| {
                                     for preset in PRESETS {
                                         if ui.selectable_label(false, preset.name).clicked() {
-                                            config.source_code = preset.code.to_string();
+                                            // Split preset code into growth and finalization
+                                            let (growth, finalization) =
+                                                split_source_code(preset.code);
+                                            config.source_code = growth;
+                                            config.finalization_code = finalization;
                                             config.iterations = preset.iterations;
                                             config.default_angle = preset.angle;
                                             config.step_size = preset.step;
@@ -102,6 +106,42 @@ pub fn ui_system(
                                     egui::TextEdit::multiline(&mut config.source_code)
                                         .code_editor()
                                         .desired_width(f32::INFINITY)
+                                        .layouter(&mut |ui, text, wrap_width| {
+                                            let font_id =
+                                                egui::TextStyle::Monospace.resolve(ui.style());
+                                            let mut job = highlight_lsystem(text.as_str(), font_id);
+                                            job.wrap.max_width = wrap_width;
+                                            ui.ctx().fonts_mut(|f| f.layout_job(job))
+                                        }),
+                                );
+                                if response.changed() && config.auto_update {
+                                    debounce.timer.reset();
+                                    debounce.pending = true;
+                                }
+                            });
+                    });
+
+                // --- FINALIZATION (Collapsible) ---
+                egui::CollapsingHeader::new("Finalization (Decomposition)")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new("Rules applied after growth phase completes")
+                                .small()
+                                .color(egui::Color32::GRAY),
+                        );
+                        ui.add_space(3.0);
+
+                        egui::ScrollArea::vertical()
+                            .min_scrolled_height(100.0)
+                            .max_height(200.0)
+                            .id_salt("finalization_scroll")
+                            .show(ui, |ui| {
+                                let response = ui.add(
+                                    egui::TextEdit::multiline(&mut config.finalization_code)
+                                        .code_editor()
+                                        .desired_width(f32::INFINITY)
+                                        .hint_text("// Decomposition rules (optional)")
                                         .layouter(&mut |ui, text, wrap_width| {
                                             let font_id =
                                                 egui::TextStyle::Monospace.resolve(ui.style());

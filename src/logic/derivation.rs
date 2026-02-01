@@ -35,12 +35,13 @@ pub fn start_derivation(
     task.cancel_flag = Some(cancel_flag.clone());
 
     let source = config.source_code.clone();
+    let finalization = config.finalization_code.clone();
     let iterations = config.iterations;
     let seed = config.seed;
 
     let pool = AsyncComputeTaskPool::get();
     pool.spawn(async move {
-        let result = perform_derivation(&source, iterations, seed, &cancel_flag);
+        let result = perform_derivation(&source, &finalization, iterations, seed, &cancel_flag);
         // Only store result if not cancelled
         if cancel_flag.load(Ordering::Relaxed)
             && let Ok(mut guard) = shared.lock()
@@ -104,8 +105,10 @@ pub fn ensure_material_palette_size(
 
 /// Performs L-system parsing and derivation. Runs on a background thread.
 /// Checks the cancellation flag periodically and aborts early if cancelled.
+/// Implements two-pass derivation: growth phase followed by optional finalization/decomposition.
 fn perform_derivation(
     source: &str,
+    finalization: &str,
     iterations: usize,
     seed: u64,
     cancel_flag: &CancellationFlag,
@@ -136,8 +139,8 @@ fn perform_derivation(
         }
     };
 
-    // Scan source for material ID usage: ,(N) pattern
-    analysis.max_material_id = scan_max_material_id(source);
+    // Scan both source and finalization for material ID usage: ,(N) pattern
+    analysis.max_material_id = scan_max_material_id(source).max(scan_max_material_id(finalization));
 
     let lines: Vec<&str> = source.lines().collect();
 
@@ -203,13 +206,79 @@ fn perform_derivation(
             return Err("Cancelled".to_string());
         }
 
-        // Derive one iteration at a time to allow cancellation checks
+        // === PHASE 1: Growth derivation ===
         for _ in 0..iterations {
             if is_cancelled() {
                 return Err("Cancelled".to_string());
             }
             sys.derive(1)
                 .map_err(|e| format!("Derivation error: {}", e))?;
+        }
+
+        // === PHASE 2: Finalization/Decomposition (if provided) ===
+        if !finalization.trim().is_empty() {
+            if is_cancelled() {
+                return Err("Cancelled".to_string());
+            }
+
+            // Clear growth rules and context sensitivity settings
+            // Constants are preserved for use in finalization
+            sys.rules.clear();
+            sys.ignored_symbols.clear();
+
+            // Parse finalization rules
+            let finalization_lines: Vec<&str> = finalization.lines().collect();
+            for (i, line) in finalization_lines.iter().enumerate() {
+                if is_cancelled() {
+                    return Err("Cancelled".to_string());
+                }
+
+                let trimmed = line.trim();
+                let line_num = i + 1;
+
+                if trimmed.is_empty() || trimmed.starts_with("//") {
+                    continue;
+                }
+
+                // Allow additional #define directives in finalization
+                if trimmed.starts_with("#") {
+                    if let Err(e) = sys.add_directive(trimmed) {
+                        return Err(format!("Finalization line {}: {}", line_num, e));
+                    }
+                    continue;
+                }
+
+                // Skip omega in finalization - we use the result from growth phase
+                if trimmed.starts_with("omega:") {
+                    continue;
+                }
+
+                // Parse and add finalization rules
+                match symbios::parser::parse_rule(trimmed) {
+                    Ok((_, rule_ast)) => {
+                        for succ in &rule_ast.successors {
+                            check_module(&succ.symbol, succ.params.len());
+                        }
+
+                        if let Err(e) = sys.add_rule(trimmed) {
+                            return Err(format!(
+                                "Finalization line {}: Rule error: {}",
+                                line_num, e
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        return Err(format!(
+                            "Finalization line {}: Parse error: {}",
+                            line_num, e
+                        ));
+                    }
+                }
+            }
+
+            // Execute single decomposition pass
+            sys.derive(1)
+                .map_err(|e| format!("Finalization derivation error: {}", e))?;
         }
     } else {
         return Err("No axiom defined".to_string());

@@ -69,6 +69,9 @@ impl Default for PropConfig {
 #[derive(Resource)]
 pub struct LSystemConfig {
     pub source_code: String,
+    /// Finalization/decomposition code for two-pass derivation.
+    /// Applied after the main growth phase completes.
+    pub finalization_code: String,
     pub iterations: usize,
     pub default_angle: f32,
     pub step_size: f32,
@@ -90,9 +93,11 @@ pub struct LSystemConfig {
 impl Default for LSystemConfig {
     fn default() -> Self {
         let default_preset = &PRESETS[3];
+        let (growth, finalization) = split_source_code(default_preset.code);
 
         Self {
-            source_code: default_preset.code.to_string(),
+            source_code: growth,
+            finalization_code: finalization,
             iterations: 5,
             default_angle: 45.0,
             step_size: 0.5,
@@ -108,6 +113,38 @@ impl Default for LSystemConfig {
             recompile_requested: true,
             auto_update: true,
         }
+    }
+}
+
+/// Separator used to split growth and finalization code in preset strings.
+pub const DECOMPOSITION_SEPARATOR: &str = "/// DECOMPOSITION ///";
+
+/// Splits a combined source code string into (growth, finalization) parts.
+/// If the separator is not found, returns the full string as growth with empty finalization.
+pub fn split_source_code(full: &str) -> (String, String) {
+    if let Some(idx) = full.find(DECOMPOSITION_SEPARATOR) {
+        let growth = full[..idx].trim_end().to_string();
+        let finalization = full[idx + DECOMPOSITION_SEPARATOR.len()..]
+            .trim_start()
+            .to_string();
+        (growth, finalization)
+    } else {
+        (full.to_string(), String::new())
+    }
+}
+
+/// Joins growth and finalization code into a single string with separator.
+/// If finalization is empty, returns just the growth code.
+pub fn join_source_code(growth: &str, finalization: &str) -> String {
+    if finalization.trim().is_empty() {
+        growth.to_string()
+    } else {
+        format!(
+            "{}\n{}\n{}",
+            growth.trim_end(),
+            DECOMPOSITION_SEPARATOR,
+            finalization.trim_start()
+        )
     }
 }
 
