@@ -37,66 +37,67 @@ pub fn ui_system(
         egui::Window::new("Symbios Lab")
             .default_width(350.0)
             .show(ctx, |ui| {
+                // --- PRESETS ---
+                ui.horizontal(|ui| {
+                    ui.label("Load Preset:");
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::LEFT), |ui| {
+                        egui::ComboBox::from_id_salt("preset_combo")
+                            .selected_text("Select...")
+                            .width(ui.available_width())
+                            .show_ui(ui, |ui| {
+                                for preset in PRESETS {
+                                    if ui.selectable_label(false, preset.name).clicked() {
+                                        // Split preset code into growth and finalization
+                                        let (growth, finalization) = split_source_code(preset.code);
+                                        config.source_code = growth;
+                                        config.finalization_code = finalization;
+                                        config.iterations = preset.iterations;
+                                        config.default_angle = preset.angle;
+                                        config.step_size = preset.step;
+                                        config.default_width = preset.width;
+                                        config.elasticity = preset.elasticity;
+                                        config.tropism = preset.tropism;
+
+                                        // Apply preset material settings
+                                        material_settings.settings.clear();
+                                        for (slot_id, mat) in preset.materials.iter() {
+                                            material_settings.settings.insert(
+                                                *slot_id,
+                                                bevy_symbios::materials::MaterialSettings {
+                                                    base_color: mat.base_color,
+                                                    roughness: mat.roughness,
+                                                    metallic: mat.metallic,
+                                                    emission_color: mat.emission_color,
+                                                    emission_strength: mat.emission_strength,
+                                                    uv_scale: mat.uv_scale,
+                                                    texture: mat.texture_type,
+                                                },
+                                            );
+                                        }
+
+                                        // Apply preset camera settings
+                                        if let Some(cam) = preset.camera {
+                                            for mut pan_orbit in camera_query.iter_mut() {
+                                                pan_orbit.target_focus = cam.focus;
+                                                pan_orbit.target_radius = cam.distance;
+                                                pan_orbit.target_pitch = cam.pitch;
+                                                pan_orbit.target_yaw = cam.yaw;
+                                                pan_orbit.force_update = true;
+                                            }
+                                        }
+
+                                        config.recompile_requested = true;
+                                        debounce.pending = false;
+                                    }
+                                }
+                            });
+                    });
+                });
+
                 // --- GRAMMAR (Collapsible) ---
                 egui::CollapsingHeader::new("Grammar")
-                    .default_open(true)
+                    .default_open(false)
                     .show(ui, |ui| {
-                        // Presets dropdown aligned right
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::TOP), |ui| {
-                            egui::ComboBox::from_id_salt("preset_combo")
-                                .selected_text("Presets...")
-                                .show_ui(ui, |ui| {
-                                    for preset in PRESETS {
-                                        if ui.selectable_label(false, preset.name).clicked() {
-                                            // Split preset code into growth and finalization
-                                            let (growth, finalization) =
-                                                split_source_code(preset.code);
-                                            config.source_code = growth;
-                                            config.finalization_code = finalization;
-                                            config.iterations = preset.iterations;
-                                            config.default_angle = preset.angle;
-                                            config.step_size = preset.step;
-                                            config.default_width = preset.width;
-                                            config.elasticity = preset.elasticity;
-                                            config.tropism = preset.tropism;
-
-                                            // Apply preset material settings
-                                            material_settings.settings.clear();
-                                            for (slot_id, mat) in preset.materials.iter() {
-                                                material_settings.settings.insert(
-                                                    *slot_id,
-                                                    bevy_symbios::materials::MaterialSettings {
-                                                        base_color: mat.base_color,
-                                                        roughness: mat.roughness,
-                                                        metallic: mat.metallic,
-                                                        emission_color: mat.emission_color,
-                                                        emission_strength: mat.emission_strength,
-                                                        uv_scale: mat.uv_scale,
-                                                        texture: mat.texture_type,
-                                                    },
-                                                );
-                                            }
-
-                                            // Apply preset camera settings
-                                            if let Some(cam) = preset.camera {
-                                                for mut pan_orbit in camera_query.iter_mut() {
-                                                    pan_orbit.target_focus = cam.focus;
-                                                    pan_orbit.target_radius = cam.distance;
-                                                    pan_orbit.target_pitch = cam.pitch;
-                                                    pan_orbit.target_yaw = cam.yaw;
-                                                    pan_orbit.force_update = true;
-                                                }
-                                            }
-
-                                            config.recompile_requested = true;
-                                            debounce.pending = false;
-                                        }
-                                    }
-                                });
-                        });
-
-                        ui.add_space(5.0);
-
                         // Editor with full available width
                         egui::ScrollArea::vertical()
                             .min_scrolled_height(200.0)
@@ -130,7 +131,6 @@ pub fn ui_system(
                                 .small()
                                 .color(egui::Color32::GRAY),
                         );
-                        ui.add_space(3.0);
 
                         egui::ScrollArea::vertical()
                             .min_scrolled_height(100.0)
@@ -157,13 +157,11 @@ pub fn ui_system(
                             });
                     });
 
-                ui.add_space(5.0);
-
                 // --- DEFINED CONSTANTS (Collapsible) ---
                 let sys = &engine.0;
                 if !sys.constants.is_empty() {
                     egui::CollapsingHeader::new("Defined Constants")
-                        .default_open(true)
+                        .default_open(false)
                         .show(ui, |ui| {
                             let mut keys: Vec<String> = sys.constants.keys().cloned().collect();
                             keys.sort();
@@ -232,83 +230,84 @@ pub fn ui_system(
                                 }
                             }
                         });
-
-                    ui.add_space(5.0);
                 }
 
-                // --- INTERPRETATION SETTINGS ---
-                ui.heading("Interpretation:");
+                // --- INTERPRETATION SETTINGS (Collapsible) ---
+                egui::CollapsingHeader::new("Interpretation")
+                    .default_open(true)
+                    .show(ui, |ui| {
+                        if analysis.uses_implicit_step
+                            && ui
+                                .add(
+                                    egui::Slider::new(&mut config.step_size, 0.1..=100.0)
+                                        .text("Step")
+                                        .logarithmic(true),
+                                )
+                                .changed()
+                        {
+                            config.recompile_requested = true;
+                        }
+                        if analysis.uses_implicit_angle
+                            && ui
+                                .add(
+                                    egui::Slider::new(&mut config.default_angle, 0.0..=180.0)
+                                        .text("Angle"),
+                                )
+                                .changed()
+                        {
+                            config.recompile_requested = true;
+                        }
+                        if !analysis.uses_explicit_width
+                            && ui
+                                .add(
+                                    egui::Slider::new(&mut config.default_width, 0.001..=10.0)
+                                        .text("Width")
+                                        .logarithmic(true),
+                                )
+                                .changed()
+                        {
+                            config.recompile_requested = true;
+                        }
 
-                if analysis.uses_implicit_step
-                    && ui
-                        .add(
-                            egui::Slider::new(&mut config.step_size, 0.1..=100.0)
-                                .text("Step")
-                                .logarithmic(true),
-                        )
-                        .changed()
-                {
-                    config.recompile_requested = true;
-                }
-                if analysis.uses_implicit_angle
-                    && ui
-                        .add(
-                            egui::Slider::new(&mut config.default_angle, 0.0..=180.0).text("Angle"),
-                        )
-                        .changed()
-                {
-                    config.recompile_requested = true;
-                }
-                if !analysis.uses_explicit_width
-                    && ui
-                        .add(
-                            egui::Slider::new(&mut config.default_width, 0.001..=10.0)
-                                .text("Width")
-                                .logarithmic(true),
-                        )
-                        .changed()
-                {
-                    config.recompile_requested = true;
-                }
+                        ui.horizontal(|ui| {
+                            ui.label("Iterations:");
+                            if ui.button("➖").clicked() && config.iterations > 0 {
+                                config.iterations -= 1;
+                                config.recompile_requested = true;
+                                debounce.pending = false;
+                            }
+                            ui.label(
+                                egui::RichText::new(format!("{}", config.iterations))
+                                    .strong()
+                                    .size(16.0),
+                            );
+                            if ui.button("➕").clicked() {
+                                config.iterations += 1;
+                                config.recompile_requested = true;
+                                debounce.pending = false;
+                            }
+                        });
 
-                ui.horizontal(|ui| {
-                    ui.label("Iterations:");
-                    if ui.button("➖").clicked() && config.iterations > 0 {
-                        config.iterations -= 1;
-                        config.recompile_requested = true;
-                        debounce.pending = false;
-                    }
-                    ui.label(
-                        egui::RichText::new(format!("{}", config.iterations))
-                            .strong()
-                            .size(16.0),
-                    );
-                    if ui.button("➕").clicked() {
-                        config.iterations += 1;
-                        config.recompile_requested = true;
-                        debounce.pending = false;
-                    }
-                });
+                        ui.horizontal(|ui| {
+                            ui.label("Random Seed:");
+                            if ui
+                                .add(egui::DragValue::new(&mut config.seed).speed(1.0))
+                                .changed()
+                            {
+                                config.recompile_requested = true;
+                            }
+                        });
 
-                ui.horizontal(|ui| {
-                    ui.label("Random Seed:");
-                    if ui
-                        .add(egui::DragValue::new(&mut config.seed).speed(1.0))
-                        .changed()
-                    {
-                        config.recompile_requested = true;
-                    }
-                });
-
-                if ui
-                    .add(
-                        egui::Slider::new(&mut config.mesh_resolution, 3..=32)
-                            .text("Mesh Resolution"),
-                    )
-                    .changed()
-                {
-                    dirty.geometry = true;
-                }
+                        if ui
+                            .add(
+                                egui::Slider::new(&mut config.mesh_resolution, 3..=32)
+                                    .text("Mesh Resolution"),
+                            )
+                            .changed()
+                        {
+                            dirty.geometry = true;
+                        }
+                    });
 
                 ui.collapsing("Physics & Tropism", |ui| {
                     if ui
@@ -346,9 +345,6 @@ pub fn ui_system(
                         config.recompile_requested = true;
                     }
                 });
-
-                ui.add_space(5.0);
-                ui.separator();
 
                 // --- MATERIAL PALETTE ---
                 ui.collapsing("Material Palette", |ui| {
@@ -435,8 +431,6 @@ pub fn ui_system(
                             });
                     });
 
-                    ui.add_space(5.0);
-
                     if ui
                         .button(format!("Export {} Files", export_config.format.name()))
                         .clicked()
@@ -458,8 +452,6 @@ pub fn ui_system(
                             .color(egui::Color32::GRAY),
                     );
                 });
-
-                ui.add_space(5.0);
 
                 // --- STATUS ---
                 if status.generating {
