@@ -6,6 +6,7 @@ A real-time 3D L-system visualization tool built with Bevy. Explore parametric g
 
 - **Real-time Editing** - Live grammar compilation with debounced auto-update
 - **Async Derivation** - Background thread compilation prevents UI freezing during high-iteration generation
+- **Two-Pass Derivation** - Separate growth and finalization phases for cleaner grammar design
 - **Material Palette** - Three editable PBR materials with base color, emission, roughness, metallic, UV scale, and procedural textures
 - **Parallel Transport Framing** - Smooth branch geometry without gimbal lock
 - **Tropism & Elasticity** - Gravity-influenced growth simulation
@@ -138,6 +139,57 @@ p2: A < A : * -> A
 
 Signals propagate along chains while respecting branch topology — `[` and `]` delimit branches, so context matching does not cross branch boundaries unless those symbols are ignored.
 
+### Two-Pass Derivation (Finalization)
+
+L-System Explorer supports dual-stage grammar execution, commonly used to separate **growth** from **decomposition**. This technique is described in ABOP Chapter 1.3 for modeling plant development.
+
+#### Concept
+
+1. **Growth Phase**: The main grammar rules execute for the specified number of iterations, producing an abstract structural description (e.g., apex symbols, internodes).
+2. **Finalization Phase**: A second set of rules runs once, decomposing abstract symbols into concrete turtle commands for rendering.
+
+This separation keeps the growth grammar clean and allows different graphical interpretations of the same structure.
+
+#### Usage
+
+In the UI, expand the **Finalization (Decomposition)** panel below the main Grammar editor. Rules entered there execute after the growth phase completes. Constants defined with `#define` in the growth phase remain available during finalization.
+
+For presets, use the separator `/// DECOMPOSITION ///` to include finalization rules:
+
+```
+#define n 5
+omega: A(n)
+p1: A(x) : x > 0 -> F I(x) [ + A(x-1) ] [ - A(x-1) ]
+p2: I(x) -> I(x)
+/// DECOMPOSITION ///
+p1: I(x) -> F(x*2)
+```
+
+#### Example: Abstract to Concrete
+
+**Growth grammar** (main editor):
+```
+#define LEN 10
+omega: A
+p1: A -> F [ + A ] F [ - A ] A
+p2: F -> S F
+```
+
+**Finalization rules** (decomposition editor):
+```
+p1: S -> F(LEN*0.5)
+```
+
+Here, `S` is an abstract "segment" symbol created during growth. The finalization pass converts each `S` to a concrete `F(5)` movement command. The `LEN` constant from the growth phase is accessible in finalization.
+
+#### Behavior Details
+
+- Growth rules execute for N iterations (set by the Iterations slider)
+- After growth completes, all growth rules are cleared
+- Finalization rules are parsed (constants are preserved)
+- A single derivation pass executes the finalization rules
+- Any `omega:` lines in finalization are ignored (the growth result is used)
+
 ## Example Grammars
 
 ### Simple Binary Tree
@@ -177,6 +229,7 @@ p2: A(s) : 0.5 -> F(s) [ & A(s*0.7) ]
 ### Grammar Panel
 - **Presets** - Load example L-systems from ABOP (Algorithmic Beauty of Plants)
 - **Code Editor** - Edit grammar with syntax highlighting
+- **Finalization (Decomposition)** - Optional second-pass rules applied after growth completes
 - **Defined Constants** - Drag sliders to adjust `#define` values in real-time
 
 ### Interpretation
@@ -267,7 +320,7 @@ cargo build --target wasm32-unknown-unknown --release
 
 ## References
 
-- Prusinkiewicz & Lindenmayer, *The Algorithmic Beauty of Plants* (ABOP)
+- [Prusinkiewicz & Lindenmayer, *The Algorithmic Beauty of Plants* (ABOP)](https://algorithmicbotany.org/papers/abop/abop.pdf)
 - [L-system Wikipedia](https://en.wikipedia.org/wiki/L-system)
 
 ## License
