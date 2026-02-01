@@ -7,7 +7,7 @@ use lsystem_explorer::core::config::{
     LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig,
 };
 use lsystem_explorer::visuals::turtle::{PropMaterialCache, TurtleRenderState};
-use lsystem_explorer::{logic, ui, visuals};
+use lsystem_explorer::{core, logic, ui, visuals};
 
 fn main() {
     App::new()
@@ -44,7 +44,9 @@ fn main() {
                 visuals::scene::setup_scene,
                 bevy_symbios::materials::setup_material_assets,
                 visuals::assets::setup_prop_assets,
-            ),
+                core::config::apply_startup_preset,
+            )
+                .chain(),
         )
         // UI
         .add_systems(EguiPrimaryContextPass, ui::editor::ui_system)

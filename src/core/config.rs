@@ -1,6 +1,7 @@
 use crate::core::presets::PRESETS;
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
+use bevy_panorbit_camera::PanOrbitCamera; // Added for the new system
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use symbios::System;
@@ -92,26 +93,75 @@ pub struct LSystemConfig {
 
 impl Default for LSystemConfig {
     fn default() -> Self {
-        let default_preset = &PRESETS[3];
-        let (growth, finalization) = split_source_code(default_preset.code);
+        if let Some(last_preset) = PRESETS.last() {
+            let (growth, finalization) = split_source_code(last_preset.code);
+            Self {
+                source_code: growth,
+                finalization_code: finalization,
+                iterations: last_preset.iterations,
+                default_angle: last_preset.angle,
+                step_size: last_preset.step,
+                default_width: last_preset.width,
+                tropism: last_preset.tropism,
+                elasticity: last_preset.elasticity,
+                seed: 82,
+                mesh_resolution: 8,
+                recompile_requested: true,
+                auto_update: true,
+            }
+        } else {
+            // Fallback if no presets exist
+            Self {
+                source_code: "omega: F\np1: F -> F".to_string(),
+                finalization_code: String::new(),
+                iterations: 1,
+                default_angle: 90.0,
+                step_size: 1.0,
+                default_width: 0.1,
+                tropism: None,
+                elasticity: 0.0,
+                seed: 42,
+                mesh_resolution: 8,
+                recompile_requested: true,
+                auto_update: true,
+            }
+        }
+    }
+}
 
-        Self {
-            source_code: growth,
-            finalization_code: finalization,
-            iterations: 5,
-            default_angle: 45.0,
-            step_size: 0.5,
-            default_width: 0.1,
+/// Startup system to apply the materials and camera settings of the default (last) preset.
+/// This ensures the scene matches the LSystemConfig loaded by Default.
+pub fn apply_startup_preset(
+    mut material_settings: ResMut<MaterialSettingsMap>,
+    mut camera_query: Query<&mut PanOrbitCamera>,
+) {
+    if let Some(preset) = PRESETS.last() {
+        // Apply Materials
+        material_settings.settings.clear();
+        for (slot_id, mat) in preset.materials.iter() {
+            material_settings.settings.insert(
+                *slot_id,
+                MaterialSettings {
+                    base_color: mat.base_color,
+                    roughness: mat.roughness,
+                    metallic: mat.metallic,
+                    emission_color: mat.emission_color,
+                    emission_strength: mat.emission_strength,
+                    uv_scale: mat.uv_scale,
+                    texture: mat.texture_type,
+                },
+            );
+        }
 
-            tropism: None,
-            elasticity: 0.0,
-
-            seed: 42,
-
-            mesh_resolution: 8,
-
-            recompile_requested: true,
-            auto_update: true,
+        // Apply Camera
+        if let Some(cam) = preset.camera {
+            for mut pan_orbit in camera_query.iter_mut() {
+                pan_orbit.target_focus = cam.focus;
+                pan_orbit.target_radius = cam.distance;
+                pan_orbit.target_pitch = cam.pitch;
+                pan_orbit.target_yaw = cam.yaw;
+                pan_orbit.force_update = true;
+            }
         }
     }
 }
