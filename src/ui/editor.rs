@@ -174,19 +174,39 @@ pub fn ui_system(
                             for key in keys {
                                 if let Some(&current_val) = sys.constants.get(&key) {
                                     let mut val_f32 = current_val as f32;
-                                    let (lo, hi) = smart_slider_range(val_f32);
+
+                                    // Generate a persistent ID for this constant's state
+                                    let slider_id = ui.make_persistent_id(&key);
+
+                                    // Retrieve the 'anchor' value if it exists (from start of drag)
+                                    let anchor = ui.ctx().data(|d| d.get_temp::<f32>(slider_id));
+
+                                    // If we have an anchor, calculate range based on THAT.
+                                    // Otherwise, use the current value.
+                                    let base_val = anchor.unwrap_or(val_f32);
+                                    let (lo, hi) = smart_slider_range(base_val);
 
                                     ui.horizontal(|ui| {
                                         ui.set_min_width(available_width);
-                                        if ui
-                                            .add_sized(
-                                                [available_width, ui.spacing().interact_size.y],
-                                                egui::Slider::new(&mut val_f32, lo..=hi)
-                                                    .text(&key)
-                                                    .clamping(egui::SliderClamping::Never),
-                                            )
-                                            .changed()
-                                        {
+                                        let response = ui.add_sized(
+                                            [available_width, ui.spacing().interact_size.y],
+                                            egui::Slider::new(&mut val_f32, lo..=hi)
+                                                .text(&key)
+                                                .clamping(egui::SliderClamping::Never),
+                                        );
+
+                                        // Store anchor on drag start
+                                        if response.drag_started() {
+                                            ui.ctx()
+                                                .data_mut(|d| d.insert_temp(slider_id, val_f32));
+                                        }
+
+                                        // Clear anchor on drag release
+                                        if response.drag_stopped() {
+                                            ui.ctx().data_mut(|d| d.remove_temp::<f32>(slider_id));
+                                        }
+
+                                        if response.changed() {
                                             let new_source = update_define_in_source(
                                                 &config.source_code,
                                                 &key,
@@ -200,8 +220,16 @@ pub fn ui_system(
                             }
 
                             if constants_changed {
-                                config.recompile_requested = true;
-                                debounce.pending = false;
+                                // Hybrid Debounce:
+                                // If the engine is idle, update immediately for responsiveness.
+                                // If busy, buffer the request to prevent cancellation storms.
+                                if !status.generating {
+                                    config.recompile_requested = true;
+                                    debounce.pending = false;
+                                } else {
+                                    debounce.timer.reset();
+                                    debounce.pending = true;
+                                }
                             }
                         });
 
