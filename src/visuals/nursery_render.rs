@@ -6,8 +6,8 @@
 use crate::core::config::{LSystemConfig, PropConfig, PropMeshType};
 use crate::core::genotype::PlantGenotype;
 use crate::ui::nursery::{
-    CachedGenotypeMesh, GRID_COLS, NurseryLabelTag, NurseryMeshTag, NurseryMode, NurseryPropTag,
-    NurseryState, POPULATION_SIZE, PopulationMeshCache,
+    CachedGenotypeMesh, NurseryLabelTag, NurseryMeshTag, NurseryMode, NurseryPropTag, NurseryState,
+    PopulationMeshCache,
 };
 use crate::visuals::assets::PropMeshAssets;
 use crate::visuals::turtle::{PropMaterialCache, PropMaterialKey, get_or_create_prop_material};
@@ -15,7 +15,6 @@ use bevy::prelude::*;
 use bevy_symbios::LSystemMeshBuilder;
 use bevy_symbios::materials::MaterialPalette;
 use symbios::System;
-use symbios_genetics::Evolver;
 use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
 
 /// Derives a PlantGenotype into a System with full state.
@@ -96,13 +95,13 @@ pub fn rebuild_nursery_cache(
     nursery.needs_3d_rebuild = false;
     cache.entries.clear();
 
-    // Get population data
-    let Some(evolver) = &mut nursery.evolver else {
+    // Get population data directly from NurseryState
+    if nursery.population.is_empty() {
         return;
-    };
+    }
 
-    let population: Vec<(PlantGenotype, f32)> = evolver
-        .population()
+    let population: Vec<(PlantGenotype, f32)> = nursery
+        .population
         .iter()
         .map(|p| (p.genotype.clone(), p.fitness))
         .collect();
@@ -175,17 +174,19 @@ pub fn render_nursery_population(
 
     // Calculate grid positions
     let spacing = nursery.grid_spacing;
-    let grid_offset = (GRID_COLS as f32 - 1.0) * spacing / 2.0;
+    let grid_size = nursery.grid_size;
+    let pop_size = nursery.population_size();
+    let grid_offset = (grid_size as f32 - 1.0) * spacing / 2.0;
 
     // Spawn meshes for each cached genotype
-    for i in 0..POPULATION_SIZE {
+    for i in 0..pop_size {
         let Some(cached) = cache.entries.get(&i) else {
             continue;
         };
 
-        // Calculate grid position (3x3 in XZ plane)
-        let row = i / GRID_COLS;
-        let col = i % GRID_COLS;
+        // Calculate grid position (NxN in XZ plane)
+        let row = i / grid_size;
+        let col = i % grid_size;
         let x = col as f32 * spacing - grid_offset;
         let z = row as f32 * spacing - grid_offset;
         let grid_pos = Vec3::new(x, 0.0, z);
@@ -288,7 +289,7 @@ pub fn render_nursery_population(
             .fold(default_step * 50.0, |a, b| a.max(b));
         let label_height = max_height + 20.0;
 
-        let is_selected = nursery.selected == Some(i);
+        let is_selected = nursery.selected.contains(&i);
 
         // Create a colored sphere indicator above each plant
         let indicator_size = if is_selected { 6.0 } else { 4.0 };
@@ -325,8 +326,6 @@ pub fn update_nursery_selection(
 ) {
     if nursery.is_changed() && nursery.mode == NurseryMode::Enabled {
         // Mark cache dirty to refresh selection indicators
-        if nursery.selected.is_some() {
-            cache.dirty = true;
-        }
+        cache.dirty = true;
     }
 }
