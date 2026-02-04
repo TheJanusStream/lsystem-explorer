@@ -39,8 +39,8 @@ pub struct NurseryLabelTag {
 
 /// Cached derived state for a single genotype in the population.
 pub struct CachedGenotypeMesh {
-    /// The derived L-system state.
-    pub system: System,
+    /// The derived L-system state (None if derivation failed).
+    pub system: Option<System>,
     /// Fitness value for display.
     pub fitness: f32,
     /// Individual's default turn angle in degrees.
@@ -49,6 +49,8 @@ pub struct CachedGenotypeMesh {
     pub step: f32,
     /// Individual's default branch width.
     pub width: f32,
+    /// Error message if derivation failed.
+    pub error: Option<String>,
 }
 
 /// Resource caching the derived meshes for the nursery population.
@@ -107,6 +109,8 @@ pub struct NurseryState {
     pub grid_spacing: f32,
     /// Grid size (NxN grid, default 3 for 9 individuals).
     pub grid_size: usize,
+    /// Derivation errors by population index (for UI display).
+    pub errors: HashMap<usize, String>,
 }
 
 impl Default for NurseryState {
@@ -121,6 +125,7 @@ impl Default for NurseryState {
             needs_3d_rebuild: false,
             grid_spacing: GRID_SPACING,
             grid_size: 3,
+            errors: HashMap::new(),
         }
     }
 }
@@ -301,6 +306,9 @@ impl NurseryState {
             return;
         }
 
+        // Increment generation first to guarantee fresh RNG seed
+        self.generation += 1;
+
         let mut rng = Pcg64::seed_from_u64(self.seed.wrapping_add(self.generation as u64));
 
         for (i, phenotype) in self.population.iter_mut().enumerate() {
@@ -465,14 +473,18 @@ pub fn nursery_ui(
             .show(ui, |ui| {
                 for (i, fitness) in &pop_data {
                     let is_selected = nursery.selected.contains(i);
+                    let error = nursery.errors.get(i);
+                    let has_error = error.is_some();
 
                     let (rect, response) = ui.allocate_exact_size(
                         egui::vec2(cell_size, cell_size),
                         egui::Sense::click(),
                     );
 
-                    // Draw cell background
-                    let bg_color = if is_selected {
+                    // Draw cell background (red tint for errors)
+                    let bg_color = if has_error {
+                        egui::Color32::from_rgb(80, 30, 30)
+                    } else if is_selected {
                         egui::Color32::from_rgb(60, 100, 60)
                     } else if response.hovered() {
                         egui::Color32::from_rgb(50, 50, 60)
@@ -482,8 +494,15 @@ pub fn nursery_ui(
 
                     ui.painter().rect_filled(rect, 4.0, bg_color);
 
-                    // Draw border for selected (champions)
-                    if is_selected {
+                    // Draw border for selected (champions) or errors
+                    if has_error {
+                        ui.painter().rect_stroke(
+                            rect,
+                            4.0,
+                            egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 80, 80)),
+                            egui::StrokeKind::Outside,
+                        );
+                    } else if is_selected {
                         ui.painter().rect_stroke(
                             rect,
                             4.0,
@@ -495,7 +514,7 @@ pub fn nursery_ui(
                     // Draw cell content
                     let center = rect.center();
 
-                    // Display index and fitness
+                    // Display index
                     ui.painter().text(
                         center - egui::vec2(0.0, 20.0),
                         egui::Align2::CENTER_CENTER,
@@ -504,21 +523,46 @@ pub fn nursery_ui(
                         egui::Color32::WHITE,
                     );
 
-                    ui.painter().text(
-                        center,
-                        egui::Align2::CENTER_CENTER,
-                        if is_selected { "🏆" } else { "🌿" },
-                        egui::FontId::proportional(24.0),
-                        egui::Color32::WHITE,
-                    );
+                    if has_error {
+                        // Show error icon for failed derivation
+                        ui.painter().text(
+                            center,
+                            egui::Align2::CENTER_CENTER,
+                            "⚠",
+                            egui::FontId::proportional(24.0),
+                            egui::Color32::from_rgb(255, 180, 100),
+                        );
 
-                    ui.painter().text(
-                        center + egui::vec2(0.0, 22.0),
-                        egui::Align2::CENTER_CENTER,
-                        format!("f:{:.0}", fitness),
-                        egui::FontId::proportional(10.0),
-                        egui::Color32::GRAY,
-                    );
+                        ui.painter().text(
+                            center + egui::vec2(0.0, 22.0),
+                            egui::Align2::CENTER_CENTER,
+                            "ERROR",
+                            egui::FontId::proportional(10.0),
+                            egui::Color32::from_rgb(255, 100, 100),
+                        );
+
+                        // Show tooltip with error message on hover
+                        if let Some(err_msg) = error.filter(|_| response.hovered()) {
+                            response.show_tooltip_text(err_msg);
+                        }
+                    } else {
+                        // Normal display: icon and fitness
+                        ui.painter().text(
+                            center,
+                            egui::Align2::CENTER_CENTER,
+                            if is_selected { "🏆" } else { "🌿" },
+                            egui::FontId::proportional(24.0),
+                            egui::Color32::WHITE,
+                        );
+
+                        ui.painter().text(
+                            center + egui::vec2(0.0, 22.0),
+                            egui::Align2::CENTER_CENTER,
+                            format!("f:{:.0}", fitness),
+                            egui::FontId::proportional(10.0),
+                            egui::Color32::GRAY,
+                        );
+                    }
 
                     // Draw load button overlay in bottom-right corner
                     let load_btn_rect = egui::Rect::from_min_size(

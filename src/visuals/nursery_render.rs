@@ -94,6 +94,7 @@ pub fn rebuild_nursery_cache(
 
     nursery.needs_3d_rebuild = false;
     cache.entries.clear();
+    nursery.errors.clear();
 
     // Get population data directly from NurseryState
     if nursery.population.is_empty() {
@@ -106,20 +107,32 @@ pub fn rebuild_nursery_cache(
         .map(|p| (p.genotype.clone(), p.fitness))
         .collect();
 
-    // Derive each genotype
+    // Derive each genotype, capturing errors
     for (i, (genotype, fitness)) in population.into_iter().enumerate() {
-        if let Some(system) = derive_genotype(&genotype, &config) {
-            cache.entries.insert(
-                i,
-                CachedGenotypeMesh {
-                    system,
-                    fitness,
-                    angle: genotype.angle,
-                    step: genotype.step,
-                    width: genotype.width,
-                },
-            );
+        let (system, error) = match derive_genotype(&genotype, &config) {
+            Some(sys) => (Some(sys), None),
+            None => (
+                None,
+                Some("Derivation failed: invalid L-system syntax".to_string()),
+            ),
+        };
+
+        // Store error in NurseryState for UI access
+        if let Some(ref err) = error {
+            nursery.errors.insert(i, err.clone());
         }
+
+        cache.entries.insert(
+            i,
+            CachedGenotypeMesh {
+                system,
+                fitness,
+                angle: genotype.angle,
+                step: genotype.step,
+                width: genotype.width,
+                error,
+            },
+        );
     }
 
     cache.cached_generation = nursery.generation;
@@ -191,109 +204,123 @@ pub fn render_nursery_population(
         let z = row as f32 * spacing - grid_offset;
         let grid_pos = Vec3::new(x, 0.0, z);
 
-        // Configure turtle interpreter using individual genotype parameters as fallbacks
-        let default_step = cached
-            .system
-            .constants
-            .get("step")
-            .map(|&s| s as f32)
-            .unwrap_or(cached.step);
+        let is_selected = nursery.selected.contains(&i);
+        let has_error = cached.error.is_some();
 
-        let default_angle = cached
-            .system
-            .constants
-            .get("angle")
-            .map(|&a| a as f32)
-            .unwrap_or(cached.angle)
-            .to_radians();
+        // Only render meshes if derivation succeeded
+        let label_height = if let Some(ref system) = cached.system {
+            // Configure turtle interpreter using individual genotype parameters as fallbacks
+            let default_step = system
+                .constants
+                .get("step")
+                .map(|&s| s as f32)
+                .unwrap_or(cached.step);
 
-        let initial_width = cached
-            .system
-            .constants
-            .get("width")
-            .map(|&w| w as f32)
-            .unwrap_or(cached.width);
+            let default_angle = system
+                .constants
+                .get("angle")
+                .map(|&a| a as f32)
+                .unwrap_or(cached.angle)
+                .to_radians();
 
-        let turtle_config = TurtleConfig {
-            default_step,
-            default_angle,
-            initial_width,
-            tropism: config.tropism,
-            elasticity: config.elasticity,
-            max_stack_depth: 1024,
-        };
+            let initial_width = system
+                .constants
+                .get("width")
+                .map(|&w| w as f32)
+                .unwrap_or(cached.width);
 
-        let mut interpreter = TurtleInterpreter::new(turtle_config);
-        interpreter.populate_standard_symbols(&cached.system.interner);
+            let turtle_config = TurtleConfig {
+                default_step,
+                default_angle,
+                initial_width,
+                tropism: config.tropism,
+                elasticity: config.elasticity,
+                max_stack_depth: 1024,
+            };
 
-        // Build skeleton and meshes
-        let skeleton = interpreter.build_skeleton(&cached.system.state);
-        let builder = LSystemMeshBuilder::new().with_resolution(config.mesh_resolution);
-        let mesh_buckets = builder.build(&skeleton);
+            let mut interpreter = TurtleInterpreter::new(turtle_config);
+            interpreter.populate_standard_symbols(&system.interner);
 
-        // Spawn branch meshes
-        for (material_id, mesh) in mesh_buckets {
-            let material = palette
-                .materials
-                .get(&material_id)
-                .unwrap_or(&palette.primary_material)
-                .clone();
+            // Build skeleton and meshes
+            let skeleton = interpreter.build_skeleton(&system.state);
+            let builder = LSystemMeshBuilder::new().with_resolution(config.mesh_resolution);
+            let mesh_buckets = builder.build(&skeleton);
 
-            commands.spawn((
-                Mesh3d(meshes.add(mesh)),
-                MeshMaterial3d(material),
-                Transform::from_translation(grid_pos),
-                NurseryMeshTag { index: i },
-            ));
-        }
-
-        // Spawn props (leaves, flowers, etc.)
-        for prop in &skeleton.props {
-            let mesh_type = prop_config
-                .prop_meshes
-                .get(&prop.prop_id)
-                .copied()
-                .unwrap_or(PropMeshType::Leaf);
-
-            let mesh_handle = prop_assets.meshes.get(&mesh_type);
-
-            if let Some(handle) = mesh_handle {
-                let key = PropMaterialKey::new(prop.material_id, prop.color);
-                let prop_material = get_or_create_prop_material(
-                    &mut prop_material_cache,
-                    &mut materials,
-                    &palette,
-                    key,
-                    prop.material_id,
-                    prop.color,
-                );
+            // Spawn branch meshes
+            for (material_id, mesh) in mesh_buckets {
+                let material = palette
+                    .materials
+                    .get(&material_id)
+                    .unwrap_or(&palette.primary_material)
+                    .clone();
 
                 commands.spawn((
-                    Mesh3d(handle.clone()),
-                    MeshMaterial3d(prop_material),
-                    Transform {
-                        translation: prop.position + grid_pos,
-                        rotation: prop.rotation,
-                        scale: prop.scale * prop_config.prop_scale,
-                    },
-                    NurseryPropTag { index: i },
+                    Mesh3d(meshes.add(mesh)),
+                    MeshMaterial3d(material),
+                    Transform::from_translation(grid_pos),
+                    NurseryMeshTag { index: i },
                 ));
             }
-        }
 
-        // Calculate approximate height for the label based on props or use a default
-        let max_height = skeleton
-            .props
-            .iter()
-            .map(|p| p.position.y)
-            .fold(default_step * 50.0, |a, b| a.max(b));
-        let label_height = max_height + 20.0;
+            // Spawn props (leaves, flowers, etc.)
+            for prop in &skeleton.props {
+                let mesh_type = prop_config
+                    .prop_meshes
+                    .get(&prop.prop_id)
+                    .copied()
+                    .unwrap_or(PropMeshType::Leaf);
 
-        let is_selected = nursery.selected.contains(&i);
+                let mesh_handle = prop_assets.meshes.get(&mesh_type);
+
+                if let Some(handle) = mesh_handle {
+                    let key = PropMaterialKey::new(prop.material_id, prop.color);
+                    let prop_material = get_or_create_prop_material(
+                        &mut prop_material_cache,
+                        &mut materials,
+                        &palette,
+                        key,
+                        prop.material_id,
+                        prop.color,
+                    );
+
+                    commands.spawn((
+                        Mesh3d(handle.clone()),
+                        MeshMaterial3d(prop_material),
+                        Transform {
+                            translation: prop.position + grid_pos,
+                            rotation: prop.rotation,
+                            scale: prop.scale * prop_config.prop_scale,
+                        },
+                        NurseryPropTag { index: i },
+                    ));
+                }
+            }
+
+            // Calculate approximate height for the label based on props
+            let max_height = skeleton
+                .props
+                .iter()
+                .map(|p| p.position.y)
+                .fold(default_step * 50.0, |a, b| a.max(b));
+            max_height + 20.0
+        } else {
+            // No system (derivation failed) - use default height
+            cached.step * 50.0 + 20.0
+        };
 
         // Create a colored sphere indicator above each plant
-        let indicator_size = if is_selected { 6.0 } else { 4.0 };
-        let indicator_color = if is_selected {
+        // Red for errors, green for selected, gray for normal
+        let indicator_size = if has_error {
+            8.0
+        } else if is_selected {
+            6.0
+        } else {
+            4.0
+        };
+
+        let indicator_color = if has_error {
+            Color::srgb(1.0, 0.2, 0.2) // Red for error
+        } else if is_selected {
             Color::srgb(0.2, 1.0, 0.2) // Bright green for selected
         } else {
             Color::srgb(0.6, 0.6, 0.7) // Gray for unselected
@@ -302,7 +329,7 @@ pub fn render_nursery_population(
         let indicator_mesh = meshes.add(Sphere::new(indicator_size));
         let indicator_material = materials.add(StandardMaterial {
             base_color: indicator_color,
-            emissive: if is_selected {
+            emissive: if has_error || is_selected {
                 indicator_color.into()
             } else {
                 LinearRgba::BLACK
