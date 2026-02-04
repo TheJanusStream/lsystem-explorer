@@ -2,9 +2,10 @@ use crate::core::config::{
     DerivationDebounce, DerivationStatus, DirtyFlags, ExportConfig, ExportFormat, LSystemAnalysis,
     LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType, split_source_code,
 };
+use crate::core::genotype::PlantGenotype;
 use crate::core::presets::PRESETS;
 use crate::ui::editor_utils::{highlight_lsystem, smart_slider_range, update_define_in_source};
-use crate::ui::nursery::{NurseryState, nursery_ui};
+use crate::ui::nursery::{NurseryMode, NurseryState, nursery_ui};
 use crate::visuals::turtle::TurtleRenderState;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -49,47 +50,56 @@ pub fn ui_system(
                             .show_ui(ui, |ui| {
                                 for preset in PRESETS {
                                     if ui.selectable_label(false, preset.name).clicked() {
-                                        // Split preset code into growth and finalization
-                                        let (growth, finalization) = split_source_code(preset.code);
-                                        config.source_code = growth;
-                                        config.finalization_code = finalization;
-                                        config.iterations = preset.iterations;
-                                        config.default_angle = preset.angle;
-                                        config.step_size = preset.step;
-                                        config.default_width = preset.width;
-                                        config.elasticity = preset.elasticity;
-                                        config.tropism = preset.tropism;
+                                        // Check if nursery is active with selections - inject preset
+                                        if nursery.mode == NurseryMode::Enabled
+                                            && !nursery.selected.is_empty()
+                                        {
+                                            let genotype = PlantGenotype::from_preset(preset);
+                                            nursery.replace_selected(genotype);
+                                        } else {
+                                            // Standard behavior: load into editor
+                                            let (growth, finalization) =
+                                                split_source_code(preset.code);
+                                            config.source_code = growth;
+                                            config.finalization_code = finalization;
+                                            config.iterations = preset.iterations;
+                                            config.default_angle = preset.angle;
+                                            config.step_size = preset.step;
+                                            config.default_width = preset.width;
+                                            config.elasticity = preset.elasticity;
+                                            config.tropism = preset.tropism;
 
-                                        // Apply preset material settings
-                                        material_settings.settings.clear();
-                                        for (slot_id, mat) in preset.materials.iter() {
-                                            material_settings.settings.insert(
-                                                *slot_id,
-                                                bevy_symbios::materials::MaterialSettings {
-                                                    base_color: mat.base_color,
-                                                    roughness: mat.roughness,
-                                                    metallic: mat.metallic,
-                                                    emission_color: mat.emission_color,
-                                                    emission_strength: mat.emission_strength,
-                                                    uv_scale: mat.uv_scale,
-                                                    texture: mat.texture_type,
-                                                },
-                                            );
-                                        }
-
-                                        // Apply preset camera settings
-                                        if let Some(cam) = preset.camera {
-                                            for mut pan_orbit in camera_query.iter_mut() {
-                                                pan_orbit.target_focus = cam.focus;
-                                                pan_orbit.target_radius = cam.distance;
-                                                pan_orbit.target_pitch = cam.pitch;
-                                                pan_orbit.target_yaw = cam.yaw;
-                                                pan_orbit.force_update = true;
+                                            // Apply preset material settings
+                                            material_settings.settings.clear();
+                                            for (slot_id, mat) in preset.materials.iter() {
+                                                material_settings.settings.insert(
+                                                    *slot_id,
+                                                    bevy_symbios::materials::MaterialSettings {
+                                                        base_color: mat.base_color,
+                                                        roughness: mat.roughness,
+                                                        metallic: mat.metallic,
+                                                        emission_color: mat.emission_color,
+                                                        emission_strength: mat.emission_strength,
+                                                        uv_scale: mat.uv_scale,
+                                                        texture: mat.texture_type,
+                                                    },
+                                                );
                                             }
-                                        }
 
-                                        config.recompile_requested = true;
-                                        debounce.pending = false;
+                                            // Apply preset camera settings
+                                            if let Some(cam) = preset.camera {
+                                                for mut pan_orbit in camera_query.iter_mut() {
+                                                    pan_orbit.target_focus = cam.focus;
+                                                    pan_orbit.target_radius = cam.distance;
+                                                    pan_orbit.target_pitch = cam.pitch;
+                                                    pan_orbit.target_yaw = cam.yaw;
+                                                    pan_orbit.force_update = true;
+                                                }
+                                            }
+
+                                            config.recompile_requested = true;
+                                            debounce.pending = false;
+                                        }
                                     }
                                 }
                             });

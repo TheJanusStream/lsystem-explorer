@@ -15,6 +15,9 @@ use symbios::System;
 use symbios::system::{CrossoverConfig, MutationConfig, StructuralMutationConfig};
 use symbios_genetics::Genotype;
 
+use crate::core::config::split_source_code;
+use crate::core::presets::LSystemPreset;
+
 /// Serializable version of material settings for genetic storage.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SerializableMaterial {
@@ -135,6 +138,44 @@ impl PlantGenotype {
     pub fn with_seed(mut self, seed: u64) -> Self {
         self.seed = seed;
         self
+    }
+
+    /// Creates a PlantGenotype from a static LSystemPreset.
+    ///
+    /// This converts a preset's configuration into an evolvable genotype,
+    /// allowing presets to be injected into the nursery for breeding.
+    pub fn from_preset(preset: &LSystemPreset) -> Self {
+        let (growth, finalization) = split_source_code(preset.code);
+
+        // Convert preset materials to serializable format
+        let materials: HashMap<u8, SerializableMaterial> = preset
+            .materials
+            .iter()
+            .map(|(slot, mat)| {
+                (
+                    *slot,
+                    SerializableMaterial {
+                        base_color: mat.base_color,
+                        emission_color: mat.emission_color,
+                        emission_strength: mat.emission_strength,
+                        roughness: mat.roughness,
+                        metallic: mat.metallic,
+                        uv_scale: mat.uv_scale,
+                    },
+                )
+            })
+            .collect();
+
+        Self {
+            source_code: growth,
+            finalization_code: finalization,
+            materials,
+            iterations: preset.iterations,
+            angle: preset.angle,
+            step: preset.step,
+            width: preset.width,
+            seed: 42,
+        }
     }
 
     /// Returns materials converted to MaterialSettings.

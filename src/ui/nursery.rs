@@ -334,6 +334,29 @@ impl NurseryState {
             self.selected.insert(index);
         }
     }
+
+    /// Replaces selected individuals with a new genotype.
+    ///
+    /// Each selected cell receives a copy of the genotype with a unique seed,
+    /// and their fitness is recalculated. This is used for preset injection.
+    pub fn replace_selected(&mut self, genotype: PlantGenotype) {
+        if self.selected.is_empty() {
+            return;
+        }
+
+        for (i, &idx) in self.selected.iter().enumerate() {
+            if let Some(phenotype) = self.population.get_mut(idx) {
+                let mut variant = genotype.clone();
+                // Give each variant a unique seed based on its position
+                variant.seed =
+                    self.seed.wrapping_add(self.generation as u64) + idx as u64 + i as u64;
+                phenotype.fitness = evaluate_genotype(&variant);
+                phenotype.genotype = variant;
+            }
+        }
+
+        self.needs_3d_rebuild = true;
+    }
 }
 
 /// Evaluates a genotype's fitness based on rule complexity and material variety.
@@ -355,30 +378,20 @@ pub fn nursery_ui(
     config: &mut LSystemConfig,
     materials: &mut MaterialSettingsMap,
 ) -> bool {
-    ui.horizontal(|ui| {
-        let (mode_text, button_color) = match nursery.mode {
-            NurseryMode::Disabled => ("🌱 Open Nursery", egui::Color32::from_rgb(60, 120, 60)),
-            NurseryMode::Enabled => ("🌿 Close Nursery", egui::Color32::from_rgb(120, 60, 60)),
-        };
-
-        let button = egui::Button::new(egui::RichText::new(mode_text).size(16.0).strong())
-            .fill(button_color)
-            .min_size(egui::vec2(ui.available_width(), 28.0));
-
-        if ui.add(button).clicked() {
-            nursery.mode = match nursery.mode {
-                NurseryMode::Disabled => {
-                    // Initialize population when opening
-                    nursery.initialize_from_editor(config, materials);
-                    nursery.needs_3d_rebuild = true;
-                    NurseryMode::Enabled
-                }
-                NurseryMode::Enabled => NurseryMode::Disabled,
-            };
-        }
-    });
-
+    // Only show Open Nursery button when disabled; when enabled, exit via Load buttons
     if nursery.mode == NurseryMode::Disabled {
+        ui.horizontal(|ui| {
+            let button =
+                egui::Button::new(egui::RichText::new("🌱 Open Nursery").size(16.0).strong())
+                    .fill(egui::Color32::from_rgb(60, 120, 60))
+                    .min_size(egui::vec2(ui.available_width(), 28.0));
+
+            if ui.add(button).clicked() {
+                nursery.initialize_from_editor(config, materials);
+                nursery.needs_3d_rebuild = true;
+                nursery.mode = NurseryMode::Enabled;
+            }
+        });
         return false;
     }
 
