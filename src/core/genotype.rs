@@ -186,12 +186,17 @@ impl PlantGenotype {
     /// This is the key round-trip operation: after mutating a System,
     /// we export its rules back to source code to maintain the source
     /// as the single source of truth.
+    ///
+    /// Output order: comments/directives → #define lines → omega line → rules
     fn reconstruct_source(system: &System, original_source: &str) -> String {
         // Export all rules from the system
         let exported_rules = system.export_rules();
 
-        // Extract non-rule lines from original source (omega, #define, etc.)
+        // Extract non-rule lines from original source, EXCLUDING #define directives
+        // (we'll regenerate those from system.constants to preserve mutations)
+        // Separate the omega line from other preamble lines
         let mut preamble_lines = Vec::new();
+        let mut omega_line: Option<String> = None;
         let mut seen_rules = false;
 
         for line in original_source.lines() {
@@ -201,8 +206,13 @@ impl PlantGenotype {
                 if !seen_rules {
                     preamble_lines.push(line.to_string());
                 }
-            } else if trimmed.starts_with("omega:") || trimmed.starts_with('#') {
-                // Keep axiom and define directives
+            } else if trimmed.starts_with("omega:") {
+                // Store omega line separately to place after #define directives
+                omega_line = Some(line.to_string());
+            } else if trimmed.starts_with("#define") {
+                // Skip old #define directives - we'll regenerate from system.constants
+            } else if trimmed.starts_with('#') {
+                // Keep other directives (#ignore, etc.)
                 preamble_lines.push(line.to_string());
             } else if trimmed.contains("->") {
                 // This is a rule line
@@ -213,9 +223,22 @@ impl PlantGenotype {
             }
         }
 
-        // Build new source with preamble + exported rules
+        // Build new source: preamble first (comments, directives like #ignore)
         let mut result = preamble_lines.join("\n");
         if !result.is_empty() && !result.ends_with('\n') {
+            result.push('\n');
+        }
+
+        // Append #define directives from system.constants (mutated values)
+        let mut constants: Vec<_> = system.constants.iter().collect();
+        constants.sort_by_key(|(k, _)| *k);
+        for (name, value) in constants {
+            result.push_str(&format!("#define {} {}\n", name, value));
+        }
+
+        // Add omega line after #define directives so constants are defined
+        if let Some(omega) = omega_line {
+            result.push_str(&omega);
             result.push('\n');
         }
 
@@ -433,5 +456,55 @@ mod tests {
 
         // Should still parse after crossover
         assert!(offspring.parse().is_some());
+    }
+
+    #[test]
+    fn test_reconstruct_source_preserves_mutated_constants() {
+        // Create a genotype with a #define directive
+        let source = "#define angle 25.0\nomega: F\nF -> F [ + F ] F".to_string();
+        let genotype = PlantGenotype::new(source);
+
+        // Parse and manually mutate the constant
+        let mut system = genotype.parse().unwrap();
+        system.constants.insert("angle".to_string(), 45.0);
+
+        // Reconstruct source from mutated system
+        let reconstructed = PlantGenotype::reconstruct_source(&system, &genotype.source_code);
+
+        // The reconstructed source should contain the mutated value
+        assert!(
+            reconstructed.contains("#define angle 45"),
+            "Expected mutated angle=45, got: {}",
+            reconstructed
+        );
+        assert!(
+            !reconstructed.contains("#define angle 25"),
+            "Should not contain old angle=25"
+        );
+    }
+
+    #[test]
+    fn test_reconstruct_source_places_define_before_omega() {
+        // Create a genotype with omega using a constant
+        let source = "#define len 2.0\nomega: F(len)\nF(x) -> F(x) F(x)".to_string();
+        let genotype = PlantGenotype::new(source);
+
+        let system = genotype.parse().unwrap();
+        let reconstructed = PlantGenotype::reconstruct_source(&system, &genotype.source_code);
+
+        // Find positions of #define and omega lines
+        let define_pos = reconstructed.find("#define len");
+        let omega_pos = reconstructed.find("omega:");
+
+        assert!(
+            define_pos.is_some() && omega_pos.is_some(),
+            "Both #define and omega should be present in: {}",
+            reconstructed
+        );
+        assert!(
+            define_pos.unwrap() < omega_pos.unwrap(),
+            "#define should appear before omega to avoid undefined constant errors.\nGot: {}",
+            reconstructed
+        );
     }
 }

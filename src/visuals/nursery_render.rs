@@ -110,9 +110,16 @@ pub fn rebuild_nursery_cache(
     // Derive each genotype
     for (i, (genotype, fitness)) in population.into_iter().enumerate() {
         if let Some(system) = derive_genotype(&genotype, &config) {
-            cache
-                .entries
-                .insert(i, CachedGenotypeMesh { system, fitness });
+            cache.entries.insert(
+                i,
+                CachedGenotypeMesh {
+                    system,
+                    fitness,
+                    angle: genotype.angle,
+                    step: genotype.step,
+                    width: genotype.width,
+                },
+            );
         }
     }
 
@@ -183,20 +190,20 @@ pub fn render_nursery_population(
         let z = row as f32 * spacing - grid_offset;
         let grid_pos = Vec3::new(x, 0.0, z);
 
-        // Configure turtle interpreter
+        // Configure turtle interpreter using individual genotype parameters as fallbacks
         let default_step = cached
             .system
             .constants
             .get("step")
             .map(|&s| s as f32)
-            .unwrap_or(config.step_size);
+            .unwrap_or(cached.step);
 
         let default_angle = cached
             .system
             .constants
             .get("angle")
             .map(|&a| a as f32)
-            .unwrap_or(config.default_angle)
+            .unwrap_or(cached.angle)
             .to_radians();
 
         let initial_width = cached
@@ -204,7 +211,7 @@ pub fn render_nursery_population(
             .constants
             .get("width")
             .map(|&w| w as f32)
-            .unwrap_or(config.default_width);
+            .unwrap_or(cached.width);
 
         let turtle_config = TurtleConfig {
             default_step,

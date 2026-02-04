@@ -49,6 +49,12 @@ pub struct CachedGenotypeMesh {
     pub system: System,
     /// Fitness value for display.
     pub fitness: f32,
+    /// Individual's default turn angle in degrees.
+    pub angle: f32,
+    /// Individual's step size.
+    pub step: f32,
+    /// Individual's default branch width.
+    pub width: f32,
 }
 
 /// Resource caching the derived meshes for the nursery population.
