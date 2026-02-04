@@ -99,368 +99,387 @@ pub fn ui_system(
                 ui.separator();
 
                 // --- NURSERY (Breeding) ---
-                nursery_ui(ui, &mut nursery, &mut config, &mut material_settings);
+                let nursery_active =
+                    nursery_ui(ui, &mut nursery, &mut config, &mut material_settings);
 
-                // --- GRAMMAR (Collapsible) ---
-                egui::CollapsingHeader::new("Grammar")
-                    .default_open(false)
-                    .show(ui, |ui| {
-                        // Editor with full available width
-                        egui::ScrollArea::vertical()
-                            .min_scrolled_height(200.0)
-                            .id_salt("source_scroll")
-                            .show(ui, |ui| {
-                                let response = ui.add(
-                                    egui::TextEdit::multiline(&mut config.source_code)
-                                        .code_editor()
-                                        .desired_width(f32::INFINITY)
-                                        .layouter(&mut |ui, text, wrap_width| {
-                                            let font_id =
-                                                egui::TextStyle::Monospace.resolve(ui.style());
-                                            let mut job = highlight_lsystem(text.as_str(), font_id);
-                                            job.wrap.max_width = wrap_width;
-                                            ui.ctx().fonts_mut(|f| f.layout_job(job))
-                                        }),
-                                );
-                                if response.changed() && config.auto_update {
-                                    debounce.timer.reset();
-                                    debounce.pending = true;
-                                }
-                            });
-                    });
-
-                // --- FINALIZATION (Collapsible) ---
-                egui::CollapsingHeader::new("Finalization (Decomposition)")
-                    .default_open(false)
-                    .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new("Rules applied after growth phase completes")
-                                .small()
-                                .color(egui::Color32::GRAY),
-                        );
-
-                        egui::ScrollArea::vertical()
-                            .min_scrolled_height(100.0)
-                            .max_height(200.0)
-                            .id_salt("finalization_scroll")
-                            .show(ui, |ui| {
-                                let response = ui.add(
-                                    egui::TextEdit::multiline(&mut config.finalization_code)
-                                        .code_editor()
-                                        .desired_width(f32::INFINITY)
-                                        .hint_text("// Decomposition rules (optional)")
-                                        .layouter(&mut |ui, text, wrap_width| {
-                                            let font_id =
-                                                egui::TextStyle::Monospace.resolve(ui.style());
-                                            let mut job = highlight_lsystem(text.as_str(), font_id);
-                                            job.wrap.max_width = wrap_width;
-                                            ui.ctx().fonts_mut(|f| f.layout_job(job))
-                                        }),
-                                );
-                                if response.changed() && config.auto_update {
-                                    debounce.timer.reset();
-                                    debounce.pending = true;
-                                }
-                            });
-                    });
-
-                // --- DEFINED CONSTANTS (Collapsible) ---
-                let sys = &engine.0;
-                if !sys.constants.is_empty() {
-                    egui::CollapsingHeader::new("Defined Constants")
+                // --- Editor sections hidden in nursery mode (Issue #60) ---
+                if !nursery_active {
+                    // --- GRAMMAR (Collapsible) ---
+                    egui::CollapsingHeader::new("Grammar")
                         .default_open(false)
                         .show(ui, |ui| {
-                            let mut keys: Vec<String> = sys.constants.keys().cloned().collect();
-                            keys.sort();
-
-                            let mut constants_changed = false;
-                            let available_width = ui.available_width();
-
-                            for key in keys {
-                                if let Some(&current_val) = sys.constants.get(&key) {
-                                    let mut val_f32 = current_val as f32;
-
-                                    // Generate a persistent ID for this constant's state
-                                    let slider_id = ui.make_persistent_id(&key);
-
-                                    // Retrieve the 'anchor' value if it exists (from start of drag)
-                                    let anchor = ui.ctx().data(|d| d.get_temp::<f32>(slider_id));
-
-                                    // If we have an anchor, calculate range based on THAT.
-                                    // Otherwise, use the current value.
-                                    let base_val = anchor.unwrap_or(val_f32);
-                                    let (lo, hi) = smart_slider_range(base_val);
-
-                                    ui.horizontal(|ui| {
-                                        ui.set_min_width(available_width);
-                                        let response = ui.add_sized(
-                                            [available_width, ui.spacing().interact_size.y],
-                                            egui::Slider::new(&mut val_f32, lo..=hi)
-                                                .text(&key)
-                                                .clamping(egui::SliderClamping::Never),
-                                        );
-
-                                        // Store anchor on drag start
-                                        if response.drag_started() {
-                                            ui.ctx()
-                                                .data_mut(|d| d.insert_temp(slider_id, val_f32));
-                                        }
-
-                                        // Clear anchor on drag release
-                                        if response.drag_stopped() {
-                                            ui.ctx().data_mut(|d| d.remove_temp::<f32>(slider_id));
-                                        }
-
-                                        if response.changed() {
-                                            let new_source = update_define_in_source(
-                                                &config.source_code,
-                                                &key,
-                                                val_f32,
-                                            );
-                                            config.source_code = new_source;
-                                            constants_changed = true;
-                                        }
-                                    });
-                                }
-                            }
-
-                            if constants_changed {
-                                // Hybrid Debounce:
-                                // If the engine is idle, update immediately for responsiveness.
-                                // If busy, buffer the request to prevent cancellation storms.
-                                if !status.generating {
-                                    config.recompile_requested = true;
-                                    debounce.pending = false;
-                                } else {
-                                    debounce.timer.reset();
-                                    debounce.pending = true;
-                                }
-                            }
+                            // Editor with full available width
+                            egui::ScrollArea::vertical()
+                                .min_scrolled_height(200.0)
+                                .id_salt("source_scroll")
+                                .show(ui, |ui| {
+                                    let response = ui.add(
+                                        egui::TextEdit::multiline(&mut config.source_code)
+                                            .code_editor()
+                                            .desired_width(f32::INFINITY)
+                                            .layouter(&mut |ui, text, wrap_width| {
+                                                let font_id =
+                                                    egui::TextStyle::Monospace.resolve(ui.style());
+                                                let mut job =
+                                                    highlight_lsystem(text.as_str(), font_id);
+                                                job.wrap.max_width = wrap_width;
+                                                ui.ctx().fonts_mut(|f| f.layout_job(job))
+                                            }),
+                                    );
+                                    if response.changed() && config.auto_update {
+                                        debounce.timer.reset();
+                                        debounce.pending = true;
+                                    }
+                                });
                         });
-                }
 
-                // --- INTERPRETATION SETTINGS (Collapsible) ---
-                egui::CollapsingHeader::new("Interpretation")
-                    .default_open(true)
-                    .show(ui, |ui| {
-                        if analysis.uses_implicit_step
-                            && ui
-                                .add(
-                                    egui::Slider::new(&mut config.step_size, 0.1..=100.0)
-                                        .text("Step")
-                                        .logarithmic(true),
-                                )
-                                .changed()
-                        {
-                            config.recompile_requested = true;
-                        }
-                        if analysis.uses_implicit_angle
-                            && ui
-                                .add(
-                                    egui::Slider::new(&mut config.default_angle, 0.0..=180.0)
-                                        .text("Angle"),
-                                )
-                                .changed()
-                        {
-                            config.recompile_requested = true;
-                        }
-                        if !analysis.uses_explicit_width
-                            && ui
-                                .add(
-                                    egui::Slider::new(&mut config.default_width, 0.001..=10.0)
-                                        .text("Width")
-                                        .logarithmic(true),
-                                )
-                                .changed()
-                        {
-                            config.recompile_requested = true;
-                        }
-
-                        ui.horizontal(|ui| {
-                            ui.label("Iterations:");
-                            if ui.button("➖").clicked() && config.iterations > 0 {
-                                config.iterations -= 1;
-                                config.recompile_requested = true;
-                                debounce.pending = false;
-                            }
+                    // --- FINALIZATION (Collapsible) ---
+                    egui::CollapsingHeader::new("Finalization (Decomposition)")
+                        .default_open(false)
+                        .show(ui, |ui| {
                             ui.label(
-                                egui::RichText::new(format!("{}", config.iterations))
-                                    .strong()
-                                    .size(16.0),
+                                egui::RichText::new("Rules applied after growth phase completes")
+                                    .small()
+                                    .color(egui::Color32::GRAY),
                             );
-                            if ui.button("➕").clicked() {
-                                config.iterations += 1;
-                                config.recompile_requested = true;
-                                debounce.pending = false;
-                            }
+
+                            egui::ScrollArea::vertical()
+                                .min_scrolled_height(100.0)
+                                .max_height(200.0)
+                                .id_salt("finalization_scroll")
+                                .show(ui, |ui| {
+                                    let response = ui.add(
+                                        egui::TextEdit::multiline(&mut config.finalization_code)
+                                            .code_editor()
+                                            .desired_width(f32::INFINITY)
+                                            .hint_text("// Decomposition rules (optional)")
+                                            .layouter(&mut |ui, text, wrap_width| {
+                                                let font_id =
+                                                    egui::TextStyle::Monospace.resolve(ui.style());
+                                                let mut job =
+                                                    highlight_lsystem(text.as_str(), font_id);
+                                                job.wrap.max_width = wrap_width;
+                                                ui.ctx().fonts_mut(|f| f.layout_job(job))
+                                            }),
+                                    );
+                                    if response.changed() && config.auto_update {
+                                        debounce.timer.reset();
+                                        debounce.pending = true;
+                                    }
+                                });
                         });
 
-                        ui.horizontal(|ui| {
-                            ui.label("Random Seed:");
-                            if ui
-                                .add(egui::DragValue::new(&mut config.seed).speed(1.0))
-                                .changed()
+                    // --- DEFINED CONSTANTS (Collapsible) ---
+                    let sys = &engine.0;
+                    if !sys.constants.is_empty() {
+                        egui::CollapsingHeader::new("Defined Constants")
+                            .default_open(false)
+                            .show(ui, |ui| {
+                                let mut keys: Vec<String> = sys.constants.keys().cloned().collect();
+                                keys.sort();
+
+                                let mut constants_changed = false;
+                                let available_width = ui.available_width();
+
+                                for key in keys {
+                                    if let Some(&current_val) = sys.constants.get(&key) {
+                                        let mut val_f32 = current_val as f32;
+
+                                        // Generate a persistent ID for this constant's state
+                                        let slider_id = ui.make_persistent_id(&key);
+
+                                        // Retrieve the 'anchor' value if it exists (from start of drag)
+                                        let anchor =
+                                            ui.ctx().data(|d| d.get_temp::<f32>(slider_id));
+
+                                        // If we have an anchor, calculate range based on THAT.
+                                        // Otherwise, use the current value.
+                                        let base_val = anchor.unwrap_or(val_f32);
+                                        let (lo, hi) = smart_slider_range(base_val);
+
+                                        ui.horizontal(|ui| {
+                                            ui.set_min_width(available_width);
+                                            let response = ui.add_sized(
+                                                [available_width, ui.spacing().interact_size.y],
+                                                egui::Slider::new(&mut val_f32, lo..=hi)
+                                                    .text(&key)
+                                                    .clamping(egui::SliderClamping::Never),
+                                            );
+
+                                            // Store anchor on drag start
+                                            if response.drag_started() {
+                                                ui.ctx().data_mut(|d| {
+                                                    d.insert_temp(slider_id, val_f32)
+                                                });
+                                            }
+
+                                            // Clear anchor on drag release
+                                            if response.drag_stopped() {
+                                                ui.ctx()
+                                                    .data_mut(|d| d.remove_temp::<f32>(slider_id));
+                                            }
+
+                                            if response.changed() {
+                                                let new_source = update_define_in_source(
+                                                    &config.source_code,
+                                                    &key,
+                                                    val_f32,
+                                                );
+                                                config.source_code = new_source;
+                                                constants_changed = true;
+                                            }
+                                        });
+                                    }
+                                }
+
+                                if constants_changed {
+                                    // Hybrid Debounce:
+                                    // If the engine is idle, update immediately for responsiveness.
+                                    // If busy, buffer the request to prevent cancellation storms.
+                                    if !status.generating {
+                                        config.recompile_requested = true;
+                                        debounce.pending = false;
+                                    } else {
+                                        debounce.timer.reset();
+                                        debounce.pending = true;
+                                    }
+                                }
+                            });
+                    }
+
+                    // --- INTERPRETATION SETTINGS (Collapsible) ---
+                    egui::CollapsingHeader::new("Interpretation")
+                        .default_open(true)
+                        .show(ui, |ui| {
+                            if analysis.uses_implicit_step
+                                && ui
+                                    .add(
+                                        egui::Slider::new(&mut config.step_size, 0.1..=100.0)
+                                            .text("Step")
+                                            .logarithmic(true),
+                                    )
+                                    .changed()
                             {
                                 config.recompile_requested = true;
                             }
+                            if analysis.uses_implicit_angle
+                                && ui
+                                    .add(
+                                        egui::Slider::new(&mut config.default_angle, 0.0..=180.0)
+                                            .text("Angle"),
+                                    )
+                                    .changed()
+                            {
+                                config.recompile_requested = true;
+                            }
+                            if !analysis.uses_explicit_width
+                                && ui
+                                    .add(
+                                        egui::Slider::new(&mut config.default_width, 0.001..=10.0)
+                                            .text("Width")
+                                            .logarithmic(true),
+                                    )
+                                    .changed()
+                            {
+                                config.recompile_requested = true;
+                            }
+
+                            ui.horizontal(|ui| {
+                                ui.label("Iterations:");
+                                if ui.button("➖").clicked() && config.iterations > 0 {
+                                    config.iterations -= 1;
+                                    config.recompile_requested = true;
+                                    debounce.pending = false;
+                                }
+                                ui.label(
+                                    egui::RichText::new(format!("{}", config.iterations))
+                                        .strong()
+                                        .size(16.0),
+                                );
+                                if ui.button("➕").clicked() {
+                                    config.iterations += 1;
+                                    config.recompile_requested = true;
+                                    debounce.pending = false;
+                                }
+                            });
+
+                            ui.horizontal(|ui| {
+                                ui.label("Random Seed:");
+                                if ui
+                                    .add(egui::DragValue::new(&mut config.seed).speed(1.0))
+                                    .changed()
+                                {
+                                    config.recompile_requested = true;
+                                }
+                            });
+
+                            if ui
+                                .add(
+                                    egui::Slider::new(&mut config.mesh_resolution, 3..=32)
+                                        .text("Mesh Resolution"),
+                                )
+                                .changed()
+                            {
+                                dirty.geometry = true;
+                            }
                         });
 
+                    ui.collapsing("Physics & Tropism", |ui| {
                         if ui
                             .add(
-                                egui::Slider::new(&mut config.mesh_resolution, 3..=32)
-                                    .text("Mesh Resolution"),
+                                egui::Slider::new(&mut config.elasticity, 0.0..=1.0)
+                                    .text("Elasticity"),
                             )
                             .changed()
                         {
-                            dirty.geometry = true;
+                            config.recompile_requested = true;
+                        }
+
+                        let mut tropism_active = config.tropism.is_some();
+                        if ui.checkbox(&mut tropism_active, "Enable Tropism").changed() {
+                            config.tropism = if tropism_active {
+                                Some(Vec3::NEG_Y)
+                            } else {
+                                None
+                            };
+                            config.recompile_requested = true;
+                        }
+
+                        let mut tropism_changed = false;
+                        if let Some(t) = &mut config.tropism {
+                            ui.horizontal(|ui| {
+                                ui.label("Vec:");
+                                tropism_changed |=
+                                    ui.add(egui::DragValue::new(&mut t.x).speed(0.1)).changed();
+                                tropism_changed |=
+                                    ui.add(egui::DragValue::new(&mut t.y).speed(0.1)).changed();
+                                tropism_changed |=
+                                    ui.add(egui::DragValue::new(&mut t.z).speed(0.1)).changed();
+                            });
+                        }
+                        if tropism_changed {
+                            config.recompile_requested = true;
                         }
                     });
+                } // End of editor-only sections
 
-                ui.collapsing("Physics & Tropism", |ui| {
-                    if ui
-                        .add(
-                            egui::Slider::new(&mut config.elasticity, 0.0..=1.0).text("Elasticity"),
-                        )
-                        .changed()
-                    {
-                        config.recompile_requested = true;
-                    }
-
-                    let mut tropism_active = config.tropism.is_some();
-                    if ui.checkbox(&mut tropism_active, "Enable Tropism").changed() {
-                        config.tropism = if tropism_active {
-                            Some(Vec3::NEG_Y)
-                        } else {
-                            None
-                        };
-                        config.recompile_requested = true;
-                    }
-
-                    let mut tropism_changed = false;
-                    if let Some(t) = &mut config.tropism {
-                        ui.horizontal(|ui| {
-                            ui.label("Vec:");
-                            tropism_changed |=
-                                ui.add(egui::DragValue::new(&mut t.x).speed(0.1)).changed();
-                            tropism_changed |=
-                                ui.add(egui::DragValue::new(&mut t.y).speed(0.1)).changed();
-                            tropism_changed |=
-                                ui.add(egui::DragValue::new(&mut t.z).speed(0.1)).changed();
-                        });
-                    }
-                    if tropism_changed {
-                        config.recompile_requested = true;
-                    }
-                });
-
-                // --- MATERIAL PALETTE ---
+                // --- MATERIAL PALETTE (Always visible) ---
                 ui.collapsing("Material Palette", |ui| {
                     bevy_symbios::ui::material_palette_editor(ui, &mut material_settings.settings);
                 });
 
-                ui.collapsing("Prop Settings", |ui| {
-                    let mut local_prop_scale = prop_config.prop_scale;
-                    let scale_changed = ui
-                        .add(egui::Slider::new(&mut local_prop_scale, 0.1..=5.0).text("Prop Scale"))
-                        .changed();
+                // --- More editor-only sections ---
+                if !nursery_active {
+                    ui.collapsing("Prop Settings", |ui| {
+                        let mut local_prop_scale = prop_config.prop_scale;
+                        let scale_changed = ui
+                            .add(
+                                egui::Slider::new(&mut local_prop_scale, 0.1..=5.0)
+                                    .text("Prop Scale"),
+                            )
+                            .changed();
 
-                    ui.separator();
-                    ui.label("Prop ID Mappings:");
+                        ui.separator();
+                        ui.label("Prop ID Mappings:");
 
-                    let mut mesh_changes: Vec<(u16, PropMeshType)> = Vec::new();
+                        let mut mesh_changes: Vec<(u16, PropMeshType)> = Vec::new();
 
-                    for prop_id in 0u16..4 {
+                        for prop_id in 0u16..4 {
+                            ui.horizontal(|ui| {
+                                ui.label(format!("~{}", prop_id));
+
+                                let current = prop_config
+                                    .prop_meshes
+                                    .get(&prop_id)
+                                    .copied()
+                                    .unwrap_or(PropMeshType::Leaf);
+
+                                egui::ComboBox::from_id_salt(format!("prop_mesh_{}", prop_id))
+                                    .selected_text(current.name())
+                                    .show_ui(ui, |ui| {
+                                        for mesh_type in PropMeshType::ALL {
+                                            if ui
+                                                .selectable_label(
+                                                    current == *mesh_type,
+                                                    mesh_type.name(),
+                                                )
+                                                .clicked()
+                                            {
+                                                mesh_changes.push((prop_id, *mesh_type));
+                                            }
+                                        }
+                                    });
+                            });
+                        }
+
+                        if scale_changed {
+                            prop_config.prop_scale = local_prop_scale;
+                            dirty.geometry = true;
+                        }
+                        for (prop_id, mesh_type) in mesh_changes {
+                            prop_config.prop_meshes.insert(prop_id, mesh_type);
+                            dirty.geometry = true;
+                        }
+                    });
+
+                    ui.collapsing("Batch Export", |ui| {
                         ui.horizontal(|ui| {
-                            ui.label(format!("~{}", prop_id));
+                            ui.label("Base Name:");
+                            ui.text_edit_singleline(&mut export_config.base_filename);
+                        });
 
-                            let current = prop_config
-                                .prop_meshes
-                                .get(&prop_id)
-                                .copied()
-                                .unwrap_or(PropMeshType::Leaf);
+                        ui.horizontal(|ui| {
+                            ui.label("Variations:");
+                            ui.add(
+                                egui::DragValue::new(&mut export_config.variation_count)
+                                    .range(1..=100)
+                                    .speed(0.5),
+                            );
+                        });
 
-                            egui::ComboBox::from_id_salt(format!("prop_mesh_{}", prop_id))
-                                .selected_text(current.name())
+                        ui.horizontal(|ui| {
+                            ui.label("Format:");
+                            egui::ComboBox::from_id_salt("export_format")
+                                .selected_text(export_config.format.name())
                                 .show_ui(ui, |ui| {
-                                    for mesh_type in PropMeshType::ALL {
+                                    for fmt in ExportFormat::ALL {
                                         if ui
                                             .selectable_label(
-                                                current == *mesh_type,
-                                                mesh_type.name(),
+                                                export_config.format == *fmt,
+                                                fmt.name(),
                                             )
                                             .clicked()
                                         {
-                                            mesh_changes.push((prop_id, *mesh_type));
+                                            export_config.format = *fmt;
                                         }
                                     }
                                 });
                         });
-                    }
 
-                    if scale_changed {
-                        prop_config.prop_scale = local_prop_scale;
-                        dirty.geometry = true;
-                    }
-                    for (prop_id, mesh_type) in mesh_changes {
-                        prop_config.prop_meshes.insert(prop_id, mesh_type);
-                        dirty.geometry = true;
-                    }
-                });
+                        if ui
+                            .button(format!("Export {} Files", export_config.format.name()))
+                            .clicked()
+                        {
+                            export_config.export_requested = true;
+                        }
 
-                ui.collapsing("Batch Export", |ui| {
-                    ui.horizontal(|ui| {
-                        ui.label("Base Name:");
-                        ui.text_edit_singleline(&mut export_config.base_filename);
-                    });
+                        #[cfg(not(target_arch = "wasm32"))]
+                        ui.label(
+                            egui::RichText::new("Files saved to ./exports/")
+                                .small()
+                                .color(egui::Color32::GRAY),
+                        );
 
-                    ui.horizontal(|ui| {
-                        ui.label("Variations:");
-                        ui.add(
-                            egui::DragValue::new(&mut export_config.variation_count)
-                                .range(1..=100)
-                                .speed(0.5),
+                        #[cfg(target_arch = "wasm32")]
+                        ui.label(
+                            egui::RichText::new("Files download via browser")
+                                .small()
+                                .color(egui::Color32::GRAY),
                         );
                     });
+                } // End of more editor-only sections
 
-                    ui.horizontal(|ui| {
-                        ui.label("Format:");
-                        egui::ComboBox::from_id_salt("export_format")
-                            .selected_text(export_config.format.name())
-                            .show_ui(ui, |ui| {
-                                for fmt in ExportFormat::ALL {
-                                    if ui
-                                        .selectable_label(export_config.format == *fmt, fmt.name())
-                                        .clicked()
-                                    {
-                                        export_config.format = *fmt;
-                                    }
-                                }
-                            });
-                    });
-
-                    if ui
-                        .button(format!("Export {} Files", export_config.format.name()))
-                        .clicked()
-                    {
-                        export_config.export_requested = true;
-                    }
-
-                    #[cfg(not(target_arch = "wasm32"))]
-                    ui.label(
-                        egui::RichText::new("Files saved to ./exports/")
-                            .small()
-                            .color(egui::Color32::GRAY),
-                    );
-
-                    #[cfg(target_arch = "wasm32")]
-                    ui.label(
-                        egui::RichText::new("Files download via browser")
-                            .small()
-                            .color(egui::Color32::GRAY),
-                    );
-                });
-
-                // --- STATUS ---
+                // --- STATUS (Always visible) ---
                 if status.generating {
                     ui.colored_label(egui::Color32::YELLOW, "⏳ Generating...");
                 } else if let Some(err) = &status.error {

@@ -6,7 +6,7 @@ use lsystem_explorer::core::config::{
     DerivationDebounce, DerivationStatus, DerivationTask, DirtyFlags, ExportConfig,
     LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig,
 };
-use lsystem_explorer::ui::nursery::NurseryState;
+use lsystem_explorer::ui::nursery::{NurseryState, PopulationMeshCache};
 use lsystem_explorer::visuals::turtle::{PropMaterialCache, TurtleRenderState};
 use lsystem_explorer::{core, logic, ui, visuals};
 
@@ -39,6 +39,7 @@ fn main() {
         .init_resource::<TurtleRenderState>()
         .init_resource::<PropMaterialCache>()
         .init_resource::<NurseryState>()
+        .init_resource::<PopulationMeshCache>()
         // Startup
         .add_systems(
             Startup,
@@ -60,6 +61,10 @@ fn main() {
                 logic::derivation::poll_derivation,
                 logic::derivation::ensure_material_palette_size,
                 visuals::turtle::render_turtle,
+                visuals::turtle::toggle_editor_visibility,
+                visuals::nursery_render::rebuild_nursery_cache,
+                visuals::nursery_render::render_nursery_population,
+                visuals::nursery_render::update_nursery_selection,
                 bevy_symbios::materials::sync_material_properties,
                 visuals::turtle::sync_prop_materials,
                 visuals::export::batch_export_system,

@@ -1,4 +1,5 @@
 use crate::core::config::{DirtyFlags, LSystemConfig, LSystemEngine, PropConfig, PropMeshType};
+use crate::ui::nursery::{NurseryMode, NurseryState};
 use crate::visuals::assets::PropMeshAssets;
 use bevy::platform::collections::HashMap;
 use bevy::platform::time::Instant;
@@ -7,6 +8,7 @@ use bevy_symbios::LSystemMeshBuilder;
 use bevy_symbios::materials::MaterialPalette;
 use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
 
+/// Component tag for the main editor L-system meshes.
 #[derive(Component)]
 pub struct LSystemMeshTag;
 
@@ -259,5 +261,29 @@ pub fn sync_prop_materials(
             tint.color,
         );
         mat_handle.0 = new_handle;
+    }
+}
+
+/// System that toggles visibility of editor meshes based on nursery mode.
+/// When nursery is enabled, the editor's single plant is hidden.
+pub fn toggle_editor_visibility(
+    nursery: Res<NurseryState>,
+    mut meshes: Query<&mut Visibility, With<LSystemMeshTag>>,
+    mut props: Query<&mut Visibility, (With<LSystemPropTag>, Without<LSystemMeshTag>)>,
+) {
+    if !nursery.is_changed() {
+        return;
+    }
+
+    let visibility = match nursery.mode {
+        NurseryMode::Disabled => Visibility::Inherited,
+        NurseryMode::Enabled => Visibility::Hidden,
+    };
+
+    for mut vis in &mut meshes {
+        *vis = visibility;
+    }
+    for mut vis in &mut props {
+        *vis = visibility;
     }
 }

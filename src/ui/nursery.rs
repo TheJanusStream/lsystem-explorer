@@ -5,10 +5,12 @@
 
 use crate::core::config::{LSystemConfig, MaterialSettingsMap};
 use crate::core::genotype::PlantGenotype;
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy_egui::egui;
 use rand::SeedableRng;
 use rand_pcg::Pcg64;
+use symbios::System;
 use symbios_genetics::{Evaluator, Evolver, Genotype, Phenotype, algorithms::simple::SimpleGA};
 
 /// Number of individuals in the nursery population.
@@ -16,6 +18,63 @@ pub const POPULATION_SIZE: usize = 9;
 
 /// Grid dimensions for display (3x3).
 pub const GRID_COLS: usize = 3;
+
+/// Spacing between plants in the 3D grid (world units).
+pub const GRID_SPACING: f32 = 75.0;
+
+/// Component tag for nursery 3D meshes (branches).
+#[derive(Component)]
+pub struct NurseryMeshTag {
+    /// Index in the population (0-8).
+    pub index: usize,
+}
+
+/// Component tag for nursery 3D props (leaves, etc.).
+#[derive(Component)]
+pub struct NurseryPropTag {
+    /// Index in the population (0-8).
+    pub index: usize,
+}
+
+/// Component tag for nursery labels (billboard text).
+#[derive(Component)]
+pub struct NurseryLabelTag {
+    /// Index in the population (0-8).
+    pub index: usize,
+}
+
+/// Cached derived state for a single genotype in the population.
+pub struct CachedGenotypeMesh {
+    /// The derived L-system state.
+    pub system: System,
+    /// Fitness value for display.
+    pub fitness: f32,
+}
+
+/// Resource caching the derived meshes for the nursery population.
+/// This prevents re-derivation every frame.
+#[derive(Resource, Default)]
+pub struct PopulationMeshCache {
+    /// Cached systems for each population index.
+    pub entries: HashMap<usize, CachedGenotypeMesh>,
+    /// Generation number when this cache was built.
+    pub cached_generation: usize,
+    /// Whether the cache needs to be rebuilt.
+    pub dirty: bool,
+}
+
+impl PopulationMeshCache {
+    /// Marks the cache as dirty, requiring rebuild.
+    pub fn invalidate(&mut self) {
+        self.dirty = true;
+    }
+
+    /// Clears all cached entries.
+    pub fn clear(&mut self) {
+        self.entries.clear();
+        self.dirty = true;
+    }
+}
 
 /// Nursery mode state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -42,6 +101,8 @@ pub struct NurseryState {
     pub seed: u64,
     /// Generation counter.
     pub generation: usize,
+    /// Flag indicating the 3D nursery view needs to be rebuilt.
+    pub needs_3d_rebuild: bool,
 }
 
 impl Default for NurseryState {
@@ -53,6 +114,7 @@ impl Default for NurseryState {
             mutation_rate: 0.15,
             seed: 42,
             generation: 0,
+            needs_3d_rebuild: false,
         }
     }
 }
@@ -183,23 +245,29 @@ impl Evaluator<PlantGenotype> for PlantEvaluator {
 }
 
 /// Renders the nursery UI panel.
+/// Returns `true` if nursery mode is currently enabled.
 pub fn nursery_ui(
     ui: &mut egui::Ui,
     nursery: &mut NurseryState,
     config: &mut LSystemConfig,
     materials: &mut MaterialSettingsMap,
-) {
+) -> bool {
     ui.horizontal(|ui| {
-        let mode_text = match nursery.mode {
-            NurseryMode::Disabled => "🌱 Open Nursery",
-            NurseryMode::Enabled => "🌿 Close Nursery",
+        let (mode_text, button_color) = match nursery.mode {
+            NurseryMode::Disabled => ("🌱 Open Nursery", egui::Color32::from_rgb(60, 120, 60)),
+            NurseryMode::Enabled => ("🌿 Close Nursery", egui::Color32::from_rgb(120, 60, 60)),
         };
 
-        if ui.button(mode_text).clicked() {
+        let button = egui::Button::new(egui::RichText::new(mode_text).size(16.0).strong())
+            .fill(button_color)
+            .min_size(egui::vec2(ui.available_width(), 28.0));
+
+        if ui.add(button).clicked() {
             nursery.mode = match nursery.mode {
                 NurseryMode::Disabled => {
                     // Initialize population when opening
                     nursery.initialize_from_editor(config, materials);
+                    nursery.needs_3d_rebuild = true;
                     NurseryMode::Enabled
                 }
                 NurseryMode::Enabled => NurseryMode::Disabled,
@@ -208,7 +276,7 @@ pub fn nursery_ui(
     });
 
     if nursery.mode == NurseryMode::Disabled {
-        return;
+        return false;
     }
 
     ui.separator();
@@ -224,6 +292,7 @@ pub fn nursery_ui(
             .clicked()
         {
             nursery.evolve_step();
+            nursery.needs_3d_rebuild = true;
         }
 
         if ui
@@ -232,6 +301,7 @@ pub fn nursery_ui(
             .clicked()
         {
             nursery.mutate_all();
+            nursery.needs_3d_rebuild = true;
         }
 
         if ui
@@ -240,6 +310,7 @@ pub fn nursery_ui(
             .clicked()
         {
             nursery.initialize_from_editor(config, materials);
+            nursery.needs_3d_rebuild = true;
         }
     });
 
@@ -342,7 +413,7 @@ pub fn nursery_ui(
     if let Some(selected_idx) = nursery.selected {
         if ui
             .button("📥 Load Selected into Editor")
-            .on_hover_text("Replace editor content with selected individual")
+            .on_hover_text("Replace editor content with selected individual and return to editor")
             .clicked()
             && let Some(genotype) = nursery.get_genotype(selected_idx)
         {
@@ -364,6 +435,9 @@ pub fn nursery_ui(
             for (slot, mat) in new_materials {
                 materials.settings.insert(slot, mat);
             }
+
+            // Return to editor mode (Issue #60)
+            nursery.mode = NurseryMode::Disabled;
         }
 
         ui.label(
@@ -372,4 +446,6 @@ pub fn nursery_ui(
                 .color(egui::Color32::GRAY),
         );
     }
+
+    true
 }
