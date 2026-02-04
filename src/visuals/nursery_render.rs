@@ -3,12 +3,14 @@
 //! This module provides systems to render the 9-individual population
 //! as a 3D grid when nursery mode is active.
 
-use crate::core::config::LSystemConfig;
+use crate::core::config::{LSystemConfig, PropConfig, PropMeshType};
 use crate::core::genotype::PlantGenotype;
 use crate::ui::nursery::{
-    CachedGenotypeMesh, GRID_COLS, GRID_SPACING, NurseryLabelTag, NurseryMeshTag, NurseryMode,
-    NurseryPropTag, NurseryState, POPULATION_SIZE, PopulationMeshCache,
+    CachedGenotypeMesh, GRID_COLS, NurseryLabelTag, NurseryMeshTag, NurseryMode, NurseryPropTag,
+    NurseryState, POPULATION_SIZE, PopulationMeshCache,
 };
+use crate::visuals::assets::PropMeshAssets;
+use crate::visuals::turtle::{PropMaterialCache, PropMaterialKey, get_or_create_prop_material};
 use bevy::prelude::*;
 use bevy_symbios::LSystemMeshBuilder;
 use bevy_symbios::materials::MaterialPalette;
@@ -17,6 +19,10 @@ use symbios_genetics::Evolver;
 use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
 
 /// Derives a PlantGenotype into a System with full state.
+///
+/// NOTE: Always creates a fresh `System::new()` to guarantee clean derivation state.
+/// This prevents cumulative derivation issues where calling `sys.derive(n)` on an
+/// already-derived system would result in double-growth.
 fn derive_genotype(genotype: &PlantGenotype, _config: &LSystemConfig) -> Option<System> {
     let mut sys = System::new();
     sys.set_seed(genotype.seed);
@@ -121,9 +127,12 @@ pub fn render_nursery_population(
     nursery: Res<NurseryState>,
     mut cache: ResMut<PopulationMeshCache>,
     config: Res<LSystemConfig>,
+    prop_config: Res<PropConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     palette: Res<MaterialPalette>,
+    mut prop_material_cache: ResMut<PropMaterialCache>,
+    prop_assets: Res<PropMeshAssets>,
     // Queries for existing nursery entities
     old_meshes: Query<Entity, With<NurseryMeshTag>>,
     old_props: Query<Entity, With<NurseryPropTag>>,
@@ -158,7 +167,8 @@ pub fn render_nursery_population(
     }
 
     // Calculate grid positions
-    let grid_offset = (GRID_COLS as f32 - 1.0) * GRID_SPACING / 2.0;
+    let spacing = nursery.grid_spacing;
+    let grid_offset = (GRID_COLS as f32 - 1.0) * spacing / 2.0;
 
     // Spawn meshes for each cached genotype
     for i in 0..POPULATION_SIZE {
@@ -169,8 +179,8 @@ pub fn render_nursery_population(
         // Calculate grid position (3x3 in XZ plane)
         let row = i / GRID_COLS;
         let col = i % GRID_COLS;
-        let x = col as f32 * GRID_SPACING - grid_offset;
-        let z = row as f32 * GRID_SPACING - grid_offset;
+        let x = col as f32 * spacing - grid_offset;
+        let z = row as f32 * spacing - grid_offset;
         let grid_pos = Vec3::new(x, 0.0, z);
 
         // Configure turtle interpreter
@@ -227,6 +237,40 @@ pub fn render_nursery_population(
                 Transform::from_translation(grid_pos),
                 NurseryMeshTag { index: i },
             ));
+        }
+
+        // Spawn props (leaves, flowers, etc.)
+        for prop in &skeleton.props {
+            let mesh_type = prop_config
+                .prop_meshes
+                .get(&prop.prop_id)
+                .copied()
+                .unwrap_or(PropMeshType::Leaf);
+
+            let mesh_handle = prop_assets.meshes.get(&mesh_type);
+
+            if let Some(handle) = mesh_handle {
+                let key = PropMaterialKey::new(prop.material_id, prop.color);
+                let prop_material = get_or_create_prop_material(
+                    &mut prop_material_cache,
+                    &mut materials,
+                    &palette,
+                    key,
+                    prop.material_id,
+                    prop.color,
+                );
+
+                commands.spawn((
+                    Mesh3d(handle.clone()),
+                    MeshMaterial3d(prop_material),
+                    Transform {
+                        translation: prop.position + grid_pos,
+                        rotation: prop.rotation,
+                        scale: prop.scale * prop_config.prop_scale,
+                    },
+                    NurseryPropTag { index: i },
+                ));
+            }
         }
 
         // Calculate approximate height for the label based on props or use a default

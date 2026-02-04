@@ -106,6 +106,10 @@ pub fn ensure_material_palette_size(
 /// Performs L-system parsing and derivation. Runs on a background thread.
 /// Checks the cancellation flag periodically and aborts early if cancelled.
 /// Implements two-pass derivation: growth phase followed by optional finalization/decomposition.
+///
+/// NOTE: Always creates a fresh `System::new()` to guarantee clean derivation state.
+/// This prevents cumulative derivation issues where calling `sys.derive(n)` on an
+/// already-derived system would result in double-growth.
 fn perform_derivation(
     source: &str,
     finalization: &str,

@@ -20,7 +20,7 @@ pub const POPULATION_SIZE: usize = 9;
 pub const GRID_COLS: usize = 3;
 
 /// Spacing between plants in the 3D grid (world units).
-pub const GRID_SPACING: f32 = 75.0;
+pub const GRID_SPACING: f32 = 750.0;
 
 /// Component tag for nursery 3D meshes (branches).
 #[derive(Component)]
@@ -103,6 +103,8 @@ pub struct NurseryState {
     pub generation: usize,
     /// Flag indicating the 3D nursery view needs to be rebuilt.
     pub needs_3d_rebuild: bool,
+    /// Spacing between plants in the 3D grid (world units).
+    pub grid_spacing: f32,
 }
 
 impl Default for NurseryState {
@@ -115,6 +117,7 @@ impl Default for NurseryState {
             seed: 42,
             generation: 0,
             needs_3d_rebuild: false,
+            grid_spacing: GRID_SPACING,
         }
     }
 }
@@ -317,6 +320,15 @@ pub fn nursery_ui(
     ui.horizontal(|ui| {
         ui.label("Mutation Rate:");
         ui.add(egui::Slider::new(&mut nursery.mutation_rate, 0.01..=0.5));
+    });
+
+    ui.horizontal(|ui| {
+        ui.label("Grid Spacing:");
+        let old_spacing = nursery.grid_spacing;
+        ui.add(egui::Slider::new(&mut nursery.grid_spacing, 50.0..=5000.0));
+        if (nursery.grid_spacing - old_spacing).abs() > 0.1 {
+            nursery.needs_3d_rebuild = true;
+        }
     });
 
     ui.separator();

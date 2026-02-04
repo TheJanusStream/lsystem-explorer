@@ -44,7 +44,7 @@ impl PropMaterialKey {
 }
 
 /// Creates or retrieves a cached prop material.
-fn get_or_create_prop_material(
+pub fn get_or_create_prop_material(
     cache: &mut PropMaterialCache,
     materials: &mut Assets<StandardMaterial>,
     palette: &MaterialPalette,
