@@ -4,6 +4,7 @@ use crate::core::config::{
 };
 use crate::core::presets::PRESETS;
 use crate::ui::editor_utils::{highlight_lsystem, smart_slider_range, update_define_in_source};
+use crate::ui::nursery::{NurseryState, nursery_ui};
 use crate::visuals::turtle::TurtleRenderState;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -23,6 +24,7 @@ pub fn ui_system(
     render_state: Res<TurtleRenderState>,
     time: Res<Time>,
     mut camera_query: Query<&mut bevy_panorbit_camera::PanOrbitCamera>,
+    mut nursery: ResMut<NurseryState>,
 ) {
     // Handle Debounce
     if debounce.pending {
@@ -93,6 +95,11 @@ pub fn ui_system(
                             });
                     });
                 });
+
+                ui.separator();
+
+                // --- NURSERY (Breeding) ---
+                nursery_ui(ui, &mut nursery, &mut config, &mut material_settings);
 
                 // --- GRAMMAR (Collapsible) ---
                 egui::CollapsingHeader::new("Grammar")

@@ -1,0 +1,437 @@
+//! Plant genotype representation for evolutionary L-systems.
+//!
+//! This module provides `PlantGenotype`, a wrapper around L-system source code
+//! and material settings that implements the `Genotype` trait from symbios-genetics.
+//!
+//! The key design principle is that the **source code is the single source of truth**.
+//! Mutations operate on the compiled System, but the results are decompiled back to
+//! source code after each operation.
+
+use bevy::platform::collections::HashMap;
+use bevy_symbios::materials::{MaterialSettings, TextureType};
+use rand::Rng;
+use serde::{Deserialize, Serialize};
+use symbios::System;
+use symbios::system::{CrossoverConfig, MutationConfig, StructuralMutationConfig};
+use symbios_genetics::Genotype;
+
+/// Serializable version of material settings for genetic storage.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct SerializableMaterial {
+    pub base_color: [f32; 3],
+    pub emission_color: [f32; 3],
+    pub emission_strength: f32,
+    pub roughness: f32,
+    pub metallic: f32,
+    pub uv_scale: f32,
+}
+
+impl Default for SerializableMaterial {
+    fn default() -> Self {
+        Self {
+            base_color: [1.0, 1.0, 1.0],
+            emission_color: [0.0, 0.0, 0.0],
+            emission_strength: 0.0,
+            roughness: 0.5,
+            metallic: 0.0,
+            uv_scale: 1.0,
+        }
+    }
+}
+
+impl From<&MaterialSettings> for SerializableMaterial {
+    fn from(m: &MaterialSettings) -> Self {
+        Self {
+            base_color: m.base_color,
+            emission_color: m.emission_color,
+            emission_strength: m.emission_strength,
+            roughness: m.roughness,
+            metallic: m.metallic,
+            uv_scale: m.uv_scale,
+        }
+    }
+}
+
+impl SerializableMaterial {
+    /// Converts back to MaterialSettings (texture defaults to None).
+    pub fn to_material_settings(&self) -> MaterialSettings {
+        MaterialSettings {
+            base_color: self.base_color,
+            emission_color: self.emission_color,
+            emission_strength: self.emission_strength,
+            roughness: self.roughness,
+            metallic: self.metallic,
+            texture: TextureType::None,
+            uv_scale: self.uv_scale,
+        }
+    }
+}
+
+/// A plant genotype encoding an L-system with material settings.
+///
+/// This struct wraps the L-system source code and associated configuration,
+/// implementing genetic operators (mutation, crossover) that maintain the
+/// source code as the single source of truth.
+#[derive(Clone, Serialize, Deserialize)]
+pub struct PlantGenotype {
+    /// The growth phase L-system source code (single source of truth).
+    pub source_code: String,
+    /// Optional finalization/decomposition code for two-pass derivation.
+    pub finalization_code: String,
+    /// Material settings by slot ID (serializable).
+    pub materials: HashMap<u8, SerializableMaterial>,
+    /// Number of derivation iterations.
+    pub iterations: usize,
+    /// Default turn angle in degrees.
+    pub angle: f32,
+    /// Step size for forward movement.
+    pub step: f32,
+    /// Default branch width.
+    pub width: f32,
+    /// Random seed for stochastic rules.
+    pub seed: u64,
+}
+
+impl PlantGenotype {
+    /// Creates a new PlantGenotype from source code with default settings.
+    pub fn new(source_code: String) -> Self {
+        Self {
+            source_code,
+            finalization_code: String::new(),
+            materials: HashMap::new(),
+            iterations: 4,
+            angle: 25.0,
+            step: 1.0,
+            width: 0.1,
+            seed: 42,
+        }
+    }
+
+    /// Creates a PlantGenotype with finalization code for two-pass derivation.
+    pub fn with_finalization(mut self, finalization_code: String) -> Self {
+        self.finalization_code = finalization_code;
+        self
+    }
+
+    /// Sets the material settings from a MaterialSettings HashMap.
+    pub fn with_materials(mut self, materials: &HashMap<u8, MaterialSettings>) -> Self {
+        self.materials = materials
+            .iter()
+            .map(|(&k, v)| (k, SerializableMaterial::from(v)))
+            .collect();
+        self
+    }
+
+    /// Sets derivation parameters.
+    pub fn with_params(mut self, iterations: usize, angle: f32, step: f32, width: f32) -> Self {
+        self.iterations = iterations;
+        self.angle = angle;
+        self.step = step;
+        self.width = width;
+        self
+    }
+
+    /// Sets the random seed.
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
+        self
+    }
+
+    /// Returns materials converted to MaterialSettings.
+    pub fn get_material_settings(&self) -> HashMap<u8, MaterialSettings> {
+        self.materials
+            .iter()
+            .map(|(&k, v)| (k, v.to_material_settings()))
+            .collect()
+    }
+
+    /// Parses the source code into a System.
+    ///
+    /// Returns None if parsing fails.
+    pub fn parse(&self) -> Option<System> {
+        let mut system = System::new();
+
+        // Parse line by line to handle axiom and rules
+        for line in self.source_code.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("//") {
+                continue;
+            }
+
+            if trimmed.starts_with("omega:") {
+                // Extract axiom
+                let axiom = trimmed.strip_prefix("omega:")?.trim();
+                system.set_axiom(axiom).ok()?;
+            } else if trimmed.starts_with('#') {
+                // Handle #define directives
+                if let Some(rest) = trimmed.strip_prefix("#define") {
+                    let parts: Vec<&str> = rest.trim().splitn(2, char::is_whitespace).collect();
+                    if parts.len() == 2
+                        && let Ok(val) = parts[1].trim().parse::<f64>()
+                    {
+                        system.constants.insert(parts[0].to_string(), val);
+                    }
+                }
+            } else if trimmed.contains("->") {
+                // This is a rule
+                system.add_rule(trimmed).ok()?;
+            }
+        }
+
+        Some(system)
+    }
+
+    /// Reconstructs source code from a mutated System.
+    ///
+    /// This is the key round-trip operation: after mutating a System,
+    /// we export its rules back to source code to maintain the source
+    /// as the single source of truth.
+    fn reconstruct_source(system: &System, original_source: &str) -> String {
+        // Export all rules from the system
+        let exported_rules = system.export_rules();
+
+        // Extract non-rule lines from original source (omega, #define, etc.)
+        let mut preamble_lines = Vec::new();
+        let mut seen_rules = false;
+
+        for line in original_source.lines() {
+            let trimmed = line.trim();
+            if trimmed.is_empty() || trimmed.starts_with("//") {
+                // Keep comments and blank lines until we hit rules
+                if !seen_rules {
+                    preamble_lines.push(line.to_string());
+                }
+            } else if trimmed.starts_with("omega:") || trimmed.starts_with('#') {
+                // Keep axiom and define directives
+                preamble_lines.push(line.to_string());
+            } else if trimmed.contains("->") {
+                // This is a rule line
+                seen_rules = true;
+            } else if !seen_rules {
+                // Keep other preamble lines
+                preamble_lines.push(line.to_string());
+            }
+        }
+
+        // Build new source with preamble + exported rules
+        let mut result = preamble_lines.join("\n");
+        if !result.is_empty() && !result.ends_with('\n') {
+            result.push('\n');
+        }
+
+        // Add exported rules
+        for (_, rule_source) in exported_rules {
+            result.push_str(&rule_source);
+            result.push('\n');
+        }
+
+        result.trim_end().to_string()
+    }
+
+    /// Mutates the material colors slightly.
+    fn mutate_materials<R: Rng>(&mut self, rng: &mut R, rate: f32) {
+        for settings in self.materials.values_mut() {
+            if rng.random::<f32>() < rate {
+                // Mutate base color slightly
+                for channel in &mut settings.base_color {
+                    *channel = (*channel + (rng.random::<f32>() - 0.5) * 0.1).clamp(0.0, 1.0);
+                }
+            }
+            if rng.random::<f32>() < rate * 0.5 {
+                // Occasionally mutate roughness/metallic
+                settings.roughness =
+                    (settings.roughness + (rng.random::<f32>() - 0.5) * 0.1).clamp(0.0, 1.0);
+            }
+        }
+    }
+
+    /// Blends materials from two parents.
+    fn blend_materials(
+        a: &HashMap<u8, SerializableMaterial>,
+        b: &HashMap<u8, SerializableMaterial>,
+        blend: f32,
+    ) -> HashMap<u8, SerializableMaterial> {
+        let mut result = HashMap::new();
+
+        // Collect all slot IDs from both parents
+        let all_slots: std::collections::HashSet<_> = a.keys().chain(b.keys()).copied().collect();
+
+        for slot in all_slots {
+            let settings = match (a.get(&slot), b.get(&slot)) {
+                (Some(ma), Some(mb)) => {
+                    // Blend the two materials
+                    let inv_blend = 1.0 - blend;
+                    SerializableMaterial {
+                        base_color: [
+                            ma.base_color[0] * blend + mb.base_color[0] * inv_blend,
+                            ma.base_color[1] * blend + mb.base_color[1] * inv_blend,
+                            ma.base_color[2] * blend + mb.base_color[2] * inv_blend,
+                        ],
+                        roughness: ma.roughness * blend + mb.roughness * inv_blend,
+                        metallic: ma.metallic * blend + mb.metallic * inv_blend,
+                        emission_color: [
+                            ma.emission_color[0] * blend + mb.emission_color[0] * inv_blend,
+                            ma.emission_color[1] * blend + mb.emission_color[1] * inv_blend,
+                            ma.emission_color[2] * blend + mb.emission_color[2] * inv_blend,
+                        ],
+                        emission_strength: ma.emission_strength * blend
+                            + mb.emission_strength * inv_blend,
+                        uv_scale: ma.uv_scale * blend + mb.uv_scale * inv_blend,
+                    }
+                }
+                (Some(m), None) | (None, Some(m)) => m.clone(),
+                (None, None) => unreachable!(),
+            };
+            result.insert(slot, settings);
+        }
+
+        result
+    }
+}
+
+impl Genotype for PlantGenotype {
+    fn mutate<R: Rng>(&mut self, rng: &mut R, rate: f32) {
+        // Skip mutation if rate is too low
+        if rate <= 0.0 {
+            return;
+        }
+
+        // Parse the source into a System
+        let Some(mut system) = self.parse() else {
+            return;
+        };
+
+        // Apply parametric mutations (probabilities and constants)
+        let mutation_config = MutationConfig {
+            rule_probability_rate: rate as f64,
+            rule_probability_strength: 0.2,
+            constant_rate: rate as f64,
+            constant_strength: 0.3,
+        };
+        system.mutate_with_rng(rng, &mutation_config);
+
+        // Apply structural mutations at a lower rate
+        if rng.random::<f32>() < rate * 0.5 {
+            let structural_config = StructuralMutationConfig {
+                successor_rate: rate as f64 * 0.3,
+                insert_rate: 0.1,
+                delete_rate: 0.1,
+                swap_rate: 0.2,
+                bytecode_rate: rate as f64 * 0.2,
+                op_rate: 0.1,
+                push_perturbation: 0.5,
+            };
+            system.structural_mutate_with_rng(rng, &structural_config);
+        }
+
+        // Reconstruct source from mutated system
+        self.source_code = Self::reconstruct_source(&system, &self.source_code);
+
+        // Mutate materials
+        self.mutate_materials(rng, rate);
+
+        // Occasionally mutate parameters
+        if rng.random::<f32>() < rate * 0.3 {
+            self.angle = (self.angle + (rng.random::<f32>() - 0.5) * 10.0).clamp(5.0, 90.0);
+        }
+        if rng.random::<f32>() < rate * 0.2 {
+            self.step = (self.step * (0.9 + rng.random::<f32>() * 0.2)).clamp(0.1, 10.0);
+        }
+        if rng.random::<f32>() < rate * 0.2 {
+            self.width = (self.width * (0.9 + rng.random::<f32>() * 0.2)).clamp(0.01, 1.0);
+        }
+
+        // Mutate seed for different stochastic outcomes
+        if rng.random::<f32>() < rate {
+            self.seed = rng.random::<u64>();
+        }
+    }
+
+    fn crossover<R: Rng>(&self, other: &Self, rng: &mut R) -> Self {
+        // Parse both parents
+        let system_a = match self.parse() {
+            Some(s) => s,
+            None => return self.clone(),
+        };
+        let system_b = match other.parse() {
+            Some(s) => s,
+            None => return self.clone(),
+        };
+
+        // Perform crossover using symbios
+        let crossover_config = CrossoverConfig {
+            rule_bias: 0.5,
+            constant_blend: rng.random::<f64>(),
+        };
+
+        let offspring_system = match system_a.crossover_with_rng(&system_b, rng, &crossover_config)
+        {
+            Ok(s) => s,
+            Err(_) => return self.clone(),
+        };
+
+        // Reconstruct source from offspring
+        let source_code = Self::reconstruct_source(&offspring_system, &self.source_code);
+
+        // Blend parameters
+        let blend = rng.random::<f32>();
+        let inv_blend = 1.0 - blend;
+
+        PlantGenotype {
+            source_code,
+            finalization_code: if rng.random::<bool>() {
+                self.finalization_code.clone()
+            } else {
+                other.finalization_code.clone()
+            },
+            materials: Self::blend_materials(&self.materials, &other.materials, blend),
+            iterations: if rng.random::<bool>() {
+                self.iterations
+            } else {
+                other.iterations
+            },
+            angle: self.angle * blend + other.angle * inv_blend,
+            step: self.step * blend + other.step * inv_blend,
+            width: self.width * blend + other.width * inv_blend,
+            seed: rng.random::<u64>(),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rand::SeedableRng;
+    use rand_pcg::Pcg64;
+
+    #[test]
+    fn test_parse_simple_genotype() {
+        let genotype = PlantGenotype::new("omega: F\nF -> F F".to_string());
+        let system = genotype.parse();
+        assert!(system.is_some());
+    }
+
+    #[test]
+    fn test_mutate_preserves_structure() {
+        let genotype = PlantGenotype::new("omega: F\nF -> F [ + F ] F".to_string());
+        let mut mutated = genotype.clone();
+
+        let mut rng = Pcg64::seed_from_u64(42);
+        mutated.mutate(&mut rng, 0.5);
+
+        // Should still parse after mutation
+        assert!(mutated.parse().is_some());
+    }
+
+    #[test]
+    fn test_crossover_produces_valid_offspring() {
+        let parent_a = PlantGenotype::new("omega: A\nA -> A B".to_string());
+        let parent_b = PlantGenotype::new("omega: A\nA -> A A".to_string());
+
+        let mut rng = Pcg64::seed_from_u64(42);
+        let offspring = parent_a.crossover(&parent_b, &mut rng);
+
+        // Should still parse after crossover
+        assert!(offspring.parse().is_some());
+    }
+}

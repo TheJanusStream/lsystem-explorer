@@ -6,6 +6,7 @@ use lsystem_explorer::core::config::{
     DerivationDebounce, DerivationStatus, DerivationTask, DirtyFlags, ExportConfig,
     LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig,
 };
+use lsystem_explorer::ui::nursery::NurseryState;
 use lsystem_explorer::visuals::turtle::{PropMaterialCache, TurtleRenderState};
 use lsystem_explorer::{core, logic, ui, visuals};
 
@@ -37,6 +38,7 @@ fn main() {
         .init_resource::<ExportConfig>()
         .init_resource::<TurtleRenderState>()
         .init_resource::<PropMaterialCache>()
+        .init_resource::<NurseryState>()
         // Startup
         .add_systems(
             Startup,
