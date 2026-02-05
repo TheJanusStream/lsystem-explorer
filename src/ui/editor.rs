@@ -371,15 +371,14 @@ pub fn ui_system(
                             config.recompile_requested = true;
                         }
                     });
-                } // End of editor-only sections
 
-                // --- MATERIAL PALETTE (Always visible) ---
-                ui.collapsing("Material Palette", |ui| {
-                    bevy_symbios::ui::material_palette_editor(ui, &mut material_settings.settings);
-                });
+                    ui.collapsing("Material Palette", |ui| {
+                        bevy_symbios::ui::material_palette_editor(
+                            ui,
+                            &mut material_settings.settings,
+                        );
+                    });
 
-                // --- More editor-only sections ---
-                if !nursery_active {
                     ui.collapsing("Prop Settings", |ui| {
                         let mut local_prop_scale = prop_config.prop_scale;
                         let scale_changed = ui
@@ -487,42 +486,42 @@ pub fn ui_system(
                                 .color(egui::Color32::GRAY),
                         );
                     });
+
+                    // --- STATUS ---
+                    if status.generating {
+                        ui.colored_label(egui::Color32::YELLOW, "⏳ Generating...");
+                    } else if let Some(err) = &status.error {
+                        ui.group(|ui| {
+                            ui.colored_label(egui::Color32::RED, "❌ Parse Error:");
+                            ui.label(
+                                egui::RichText::new(err)
+                                    .color(egui::Color32::from_rgb(255, 100, 100))
+                                    .small(),
+                            );
+                        });
+                    } else if debounce.pending {
+                        ui.colored_label(egui::Color32::YELLOW, "⏳ Typing...");
+                    } else {
+                        ui.horizontal(|ui| {
+                            ui.colored_label(egui::Color32::GREEN, "✅ Mesh Ready");
+                            let total_ms =
+                                render_state.derivation_time_ms + render_state.meshing_time_ms;
+                            ui.label(format!(
+                                "| {} Verts | {:.1}ms (D:{:.1} M:{:.1})",
+                                render_state.total_vertices,
+                                total_ms,
+                                render_state.derivation_time_ms,
+                                render_state.meshing_time_ms,
+                            ));
+                        });
+                    }
+
+                    ui.checkbox(&mut config.auto_update, "Live Update");
+                    if !config.auto_update && ui.button("▶ Run / Recompile").clicked() {
+                        config.recompile_requested = true;
+                        debounce.pending = false;
+                    }
                 } // End of more editor-only sections
-
-                // --- STATUS (Always visible) ---
-                if status.generating {
-                    ui.colored_label(egui::Color32::YELLOW, "⏳ Generating...");
-                } else if let Some(err) = &status.error {
-                    ui.group(|ui| {
-                        ui.colored_label(egui::Color32::RED, "❌ Parse Error:");
-                        ui.label(
-                            egui::RichText::new(err)
-                                .color(egui::Color32::from_rgb(255, 100, 100))
-                                .small(),
-                        );
-                    });
-                } else if debounce.pending {
-                    ui.colored_label(egui::Color32::YELLOW, "⏳ Typing...");
-                } else {
-                    ui.horizontal(|ui| {
-                        ui.colored_label(egui::Color32::GREEN, "✅ Mesh Ready");
-                        let total_ms =
-                            render_state.derivation_time_ms + render_state.meshing_time_ms;
-                        ui.label(format!(
-                            "| {} Verts | {:.1}ms (D:{:.1} M:{:.1})",
-                            render_state.total_vertices,
-                            total_ms,
-                            render_state.derivation_time_ms,
-                            render_state.meshing_time_ms,
-                        ));
-                    });
-                }
-
-                ui.checkbox(&mut config.auto_update, "Live Update");
-                if !config.auto_update && ui.button("▶ Run / Recompile").clicked() {
-                    config.recompile_requested = true;
-                    debounce.pending = false;
-                }
             });
     }
 }

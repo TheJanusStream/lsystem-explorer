@@ -449,7 +449,7 @@ pub fn nursery_ui(
         ui.label("Grid Size:");
         let old_size = nursery.grid_size;
         let mut new_size = old_size as i32;
-        ui.add(egui::Slider::new(&mut new_size, 2..=5).suffix("×"));
+        ui.add(egui::Slider::new(&mut new_size, 2..=8).suffix("×"));
         if new_size as usize != old_size {
             nursery.resize_population(new_size as usize);
             nursery.needs_3d_rebuild = true;
@@ -468,7 +468,7 @@ pub fn nursery_ui(
         .collect();
 
     if !pop_data.is_empty() {
-        let cell_size = 80.0;
+        let cell_size = 40.0;
 
         // Show selection count
         let selected_count = nursery.selected.len();
@@ -484,7 +484,7 @@ pub fn nursery_ui(
             .num_columns(grid_size)
             .spacing([4.0, 4.0])
             .show(ui, |ui| {
-                for (i, fitness) in &pop_data {
+                for (i, _fitness) in &pop_data {
                     let is_selected = nursery.selected.contains(i);
                     let error = nursery.errors.get(i);
                     let has_error = error.is_some();
@@ -527,6 +527,7 @@ pub fn nursery_ui(
                     // Draw cell content
                     let center = rect.center();
 
+                    /*
                     // Display index
                     ui.painter().text(
                         center - egui::vec2(0.0, 20.0),
@@ -535,6 +536,7 @@ pub fn nursery_ui(
                         egui::FontId::proportional(14.0),
                         egui::Color32::WHITE,
                     );
+                    */
 
                     if has_error {
                         // Show error icon for failed derivation
@@ -546,6 +548,7 @@ pub fn nursery_ui(
                             egui::Color32::from_rgb(255, 180, 100),
                         );
 
+                        /*
                         ui.painter().text(
                             center + egui::vec2(0.0, 22.0),
                             egui::Align2::CENTER_CENTER,
@@ -553,6 +556,7 @@ pub fn nursery_ui(
                             egui::FontId::proportional(10.0),
                             egui::Color32::from_rgb(255, 100, 100),
                         );
+                        */
 
                         // Show tooltip with error message on hover
                         if let Some(err_msg) = error.filter(|_| response.hovered()) {
@@ -568,6 +572,7 @@ pub fn nursery_ui(
                             egui::Color32::WHITE,
                         );
 
+                        /*
                         ui.painter().text(
                             center + egui::vec2(0.0, 22.0),
                             egui::Align2::CENTER_CENTER,
@@ -575,6 +580,7 @@ pub fn nursery_ui(
                             egui::FontId::proportional(10.0),
                             egui::Color32::GRAY,
                         );
+                        */
                     }
 
                     // Draw load button overlay in bottom-right corner

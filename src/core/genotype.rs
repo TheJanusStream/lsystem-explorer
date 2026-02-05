@@ -12,7 +12,8 @@ use bevy_symbios::materials::{MaterialSettings, TextureType};
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use symbios::System;
-use symbios::system::{CrossoverConfig, MutationConfig, StructuralMutationConfig};
+use symbios::system::crossover::CrossoverConfig;
+use symbios::system::mutate::{MutationConfig, StructuralMutationConfig};
 use symbios_genetics::Genotype;
 
 use crate::core::config::split_source_code;
@@ -371,6 +372,8 @@ impl Genotype for PlantGenotype {
             rule_probability_strength: 0.2,
             constant_rate: rate as f64,
             constant_strength: 0.3,
+            gaussian_jitter_scale: 0.4,
+            gaussian_jitter_rate: rate as f64,
         };
         system.mutate_with_rng(rng, &mutation_config);
 
