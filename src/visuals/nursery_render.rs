@@ -371,7 +371,7 @@ pub fn render_nursery_population(
         let panel_color = if has_error {
             Color::srgba(1.0, 0.2, 0.2, 0.35)
         } else if is_selected {
-            Color::srgba(0.2, 1.0, 0.2, 0.4)
+            Color::srgba(0.0, 0.39, 0.0, 0.4)
         } else {
             Color::srgba(0.5, 0.5, 0.6, 0.15)
         };

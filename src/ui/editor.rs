@@ -108,12 +108,8 @@ pub fn ui_system(
 
                 ui.separator();
 
-                // --- NURSERY (Breeding) ---
-                let nursery_active =
-                    nursery_ui(ui, &mut nursery, &mut config, &mut material_settings);
-
                 // --- Editor sections hidden in nursery mode (Issue #60) ---
-                if !nursery_active {
+                if nursery.mode == NurseryMode::Disabled {
                     // --- GRAMMAR (Collapsible) ---
                     egui::CollapsingHeader::new("Grammar")
                         .default_open(false)
@@ -521,7 +517,10 @@ pub fn ui_system(
                         config.recompile_requested = true;
                         debounce.pending = false;
                     }
-                } // End of more editor-only sections
+                }
+                // End of more editor-only sections
+
+                nursery_ui(ui, &mut nursery, &mut config, &mut material_settings);
             });
     }
 }

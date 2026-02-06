@@ -385,14 +385,244 @@ pub fn nursery_ui(
     nursery: &mut NurseryState,
     config: &mut LSystemConfig,
     materials: &mut MaterialSettingsMap,
-) -> bool {
-    // Only show Open Nursery button when disabled; when enabled, exit via Load buttons
-    if nursery.mode == NurseryMode::Disabled {
+) {
+    if nursery.mode == NurseryMode::Enabled {
         ui.horizontal(|ui| {
-            let button =
-                egui::Button::new(egui::RichText::new("🌱 Open Nursery").size(16.0).strong())
-                    .fill(egui::Color32::from_rgb(60, 120, 60))
-                    .min_size(egui::vec2(ui.available_width(), 28.0));
+            ui.label(format!("Generation: {}", nursery.generation));
+            ui.separator();
+
+            if ui
+                .button("Breed")
+                .on_hover_text("Breed next generation from selected champions")
+                .clicked()
+            {
+                nursery.breed();
+                nursery.needs_3d_rebuild = true;
+            }
+
+            if ui
+                .button("Mutate")
+                .on_hover_text("Mutate all non-elite individuals")
+                .clicked()
+            {
+                nursery.mutate_all();
+                nursery.needs_3d_rebuild = true;
+            }
+
+            if ui
+                .button("Reset")
+                .on_hover_text("Reset population from current editor")
+                .clicked()
+            {
+                nursery.initialize_from_editor(config, materials);
+                nursery.needs_3d_rebuild = true;
+            }
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Mutation Rate:");
+            ui.add(egui::Slider::new(&mut nursery.mutation_rate, 0.01..=0.5));
+        });
+
+        ui.horizontal(|ui| {
+            ui.label("Grid Spacing:");
+            let old_spacing = nursery.grid_spacing;
+            ui.add(egui::Slider::new(&mut nursery.grid_spacing, 50.0..=5000.0));
+            if (nursery.grid_spacing - old_spacing).abs() > 0.1 {
+                nursery.needs_3d_rebuild = true;
+            }
+        });
+
+        // Grid size slider
+        ui.horizontal(|ui| {
+            ui.label("Grid Size:");
+            let old_size = nursery.grid_size;
+            let mut new_size = old_size as i32;
+            ui.add(egui::Slider::new(&mut new_size, 2..=8).suffix("×"));
+            if new_size as usize != old_size {
+                nursery.resize_population(new_size as usize);
+                nursery.needs_3d_rebuild = true;
+            }
+        });
+
+        ui.separator();
+
+        // Population Grid
+        let grid_size = nursery.grid_size;
+        let pop_data: Vec<(usize, f32)> = nursery
+            .population
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (i, p.fitness))
+            .collect();
+
+        if !pop_data.is_empty() {
+            let cell_size = 40.0;
+
+            egui::Grid::new("nursery_grid")
+                .num_columns(grid_size)
+                .spacing([4.0, 4.0])
+                .show(ui, |ui| {
+                    for (i, _fitness) in &pop_data {
+                        let is_selected = nursery.selected.contains(i);
+                        let error = nursery.errors.get(i);
+                        let has_error = error.is_some();
+
+                        let (rect, response) = ui.allocate_exact_size(
+                            egui::vec2(cell_size, cell_size),
+                            egui::Sense::click(),
+                        );
+
+                        // Draw cell background (red tint for errors)
+                        let bg_color = if has_error {
+                            egui::Color32::from_rgb(80, 30, 30)
+                        } else if is_selected {
+                            egui::Color32::DARK_GREEN
+                        } else if response.hovered() {
+                            egui::Color32::from_rgb(50, 50, 60)
+                        } else {
+                            egui::Color32::from_rgb(35, 35, 40)
+                        };
+
+                        ui.painter().rect_filled(rect, 4.0, bg_color);
+
+                        // Draw border for selected (champions) or errors
+                        if has_error {
+                            ui.painter().rect_stroke(
+                                rect,
+                                4.0,
+                                egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 80, 80)),
+                                egui::StrokeKind::Outside,
+                            );
+                        } else if is_selected {
+                            ui.painter().rect_stroke(
+                                rect,
+                                4.0,
+                                egui::Stroke::new(2.0, egui::Color32::GREEN),
+                                egui::StrokeKind::Outside,
+                            );
+                        }
+
+                        // Draw cell content
+                        let center = rect.center();
+
+                        if has_error {
+                            // Show error icon for failed derivation
+                            ui.painter().text(
+                                center,
+                                egui::Align2::CENTER_CENTER,
+                                "⚠",
+                                egui::FontId::proportional(24.0),
+                                egui::Color32::from_rgb(255, 180, 100),
+                            );
+
+                            // Show tooltip with error message on hover
+                            if let Some(err_msg) = error.filter(|_| response.hovered()) {
+                                response.show_tooltip_text(err_msg);
+                            }
+                        } else {
+                            // Normal display: icon and fitness
+                            ui.painter().text(
+                                center,
+                                egui::Align2::CENTER_CENTER,
+                                if is_selected { "🏆" } else { "🌿" },
+                                egui::FontId::proportional(24.0),
+                                egui::Color32::WHITE,
+                            );
+                        }
+
+                        // Draw load button overlay in bottom-right corner
+                        let load_btn_rect = egui::Rect::from_min_size(
+                            rect.right_bottom() - egui::vec2(22.0, 22.0),
+                            egui::vec2(20.0, 20.0),
+                        );
+                        let load_hovered = response.hovered()
+                            && ui
+                                .input(|i| i.pointer.hover_pos())
+                                .map(|p| load_btn_rect.contains(p))
+                                .unwrap_or(false);
+
+                        if response.hovered() {
+                            let load_bg = if load_hovered {
+                                egui::Color32::from_rgb(253, 195, 49)
+                            } else {
+                                egui::Color32::from_rgb(60, 80, 120)
+                            };
+                            ui.painter().rect_filled(load_btn_rect, 3.0, load_bg);
+
+                            if load_hovered {
+                                ui.painter().rect_stroke(
+                                    load_btn_rect,
+                                    1.0,
+                                    egui::Stroke::new(3.0, egui::Color32::BLACK),
+                                    egui::StrokeKind::Outside,
+                                );
+                            }
+
+                            ui.painter().text(
+                                load_btn_rect.center(),
+                                egui::Align2::CENTER_CENTER,
+                                "📥",
+                                egui::FontId::proportional(12.0),
+                                if load_hovered {
+                                    egui::Color32::BLACK
+                                } else {
+                                    egui::Color32::WHITE
+                                },
+                            );
+                        }
+
+                        // Handle clicks
+                        if response.clicked() {
+                            if load_hovered {
+                                // Load into editor
+                                if let Some(genotype) = nursery.get_genotype(*i) {
+                                    let new_materials = genotype.get_material_settings();
+                                    config.source_code = genotype.source_code;
+                                    config.finalization_code = genotype.finalization_code;
+                                    config.iterations = genotype.iterations;
+                                    config.default_angle = genotype.angle;
+                                    config.step_size = genotype.step;
+                                    config.default_width = genotype.width;
+                                    config.elasticity = genotype.elasticity;
+                                    config.tropism =
+                                        genotype.tropism.map(|t| Vec3::new(t[0], t[1], t[2]));
+                                    config.seed = genotype.seed;
+                                    config.recompile_requested = true;
+                                    materials.settings.clear();
+                                    for (slot, mat) in new_materials {
+                                        materials.settings.insert(slot, mat);
+                                    }
+                                    nursery.mode = NurseryMode::Disabled;
+                                }
+                            } else {
+                                // Toggle selection
+                                nursery.toggle_selection(*i);
+                                nursery.needs_3d_rebuild = true;
+                            }
+                        }
+
+                        // End row after grid_size items
+                        if (i + 1) % grid_size == 0 {
+                            ui.end_row();
+                        }
+                    }
+                });
+
+            // Show selection count
+            let selected_count = nursery.selected.len();
+            if selected_count > 0 {
+                ui.label(
+                    egui::RichText::new(format!("Champions: {} selected", selected_count))
+                        .small()
+                        .color(egui::Color32::from_rgb(100, 200, 100)),
+                );
+            }
+        }
+    } else {
+        ui.horizontal(|ui| {
+            let button = egui::Button::new(egui::RichText::new("🌱 Open Nursery").size(16.0))
+                .min_size(egui::vec2(ui.available_width(), 28.0));
 
             if ui.add(button).clicked() {
                 nursery.initialize_from_editor(config, materials);
@@ -400,261 +630,5 @@ pub fn nursery_ui(
                 nursery.mode = NurseryMode::Enabled;
             }
         });
-        return false;
     }
-
-    ui.separator();
-
-    // Controls
-    ui.horizontal(|ui| {
-        ui.label(format!("Generation: {}", nursery.generation));
-        ui.separator();
-
-        if ui
-            .button("🧬 Breed")
-            .on_hover_text("Breed next generation from selected champions")
-            .clicked()
-        {
-            nursery.breed();
-            nursery.needs_3d_rebuild = true;
-        }
-
-        if ui
-            .button("🎲 Mutate")
-            .on_hover_text("Mutate all non-elite individuals")
-            .clicked()
-        {
-            nursery.mutate_all();
-            nursery.needs_3d_rebuild = true;
-        }
-
-        if ui
-            .button("🔄 Reset")
-            .on_hover_text("Reset population from current editor")
-            .clicked()
-        {
-            nursery.initialize_from_editor(config, materials);
-            nursery.needs_3d_rebuild = true;
-        }
-    });
-
-    ui.horizontal(|ui| {
-        ui.label("Mutation Rate:");
-        ui.add(egui::Slider::new(&mut nursery.mutation_rate, 0.01..=0.5));
-    });
-
-    ui.horizontal(|ui| {
-        ui.label("Grid Spacing:");
-        let old_spacing = nursery.grid_spacing;
-        ui.add(egui::Slider::new(&mut nursery.grid_spacing, 50.0..=5000.0));
-        if (nursery.grid_spacing - old_spacing).abs() > 0.1 {
-            nursery.needs_3d_rebuild = true;
-        }
-    });
-
-    // Grid size slider
-    ui.horizontal(|ui| {
-        ui.label("Grid Size:");
-        let old_size = nursery.grid_size;
-        let mut new_size = old_size as i32;
-        ui.add(egui::Slider::new(&mut new_size, 2..=8).suffix("×"));
-        if new_size as usize != old_size {
-            nursery.resize_population(new_size as usize);
-            nursery.needs_3d_rebuild = true;
-        }
-    });
-
-    ui.separator();
-
-    // Population Grid
-    let grid_size = nursery.grid_size;
-    let pop_data: Vec<(usize, f32)> = nursery
-        .population
-        .iter()
-        .enumerate()
-        .map(|(i, p)| (i, p.fitness))
-        .collect();
-
-    if !pop_data.is_empty() {
-        let cell_size = 40.0;
-
-        // Show selection count
-        let selected_count = nursery.selected.len();
-        if selected_count > 0 {
-            ui.label(
-                egui::RichText::new(format!("Champions: {} selected", selected_count))
-                    .small()
-                    .color(egui::Color32::from_rgb(100, 200, 100)),
-            );
-        }
-
-        egui::Grid::new("nursery_grid")
-            .num_columns(grid_size)
-            .spacing([4.0, 4.0])
-            .show(ui, |ui| {
-                for (i, _fitness) in &pop_data {
-                    let is_selected = nursery.selected.contains(i);
-                    let error = nursery.errors.get(i);
-                    let has_error = error.is_some();
-
-                    let (rect, response) = ui.allocate_exact_size(
-                        egui::vec2(cell_size, cell_size),
-                        egui::Sense::click(),
-                    );
-
-                    // Draw cell background (red tint for errors)
-                    let bg_color = if has_error {
-                        egui::Color32::from_rgb(80, 30, 30)
-                    } else if is_selected {
-                        egui::Color32::from_rgb(60, 100, 60)
-                    } else if response.hovered() {
-                        egui::Color32::from_rgb(50, 50, 60)
-                    } else {
-                        egui::Color32::from_rgb(35, 35, 40)
-                    };
-
-                    ui.painter().rect_filled(rect, 4.0, bg_color);
-
-                    // Draw border for selected (champions) or errors
-                    if has_error {
-                        ui.painter().rect_stroke(
-                            rect,
-                            4.0,
-                            egui::Stroke::new(2.0, egui::Color32::from_rgb(255, 80, 80)),
-                            egui::StrokeKind::Outside,
-                        );
-                    } else if is_selected {
-                        ui.painter().rect_stroke(
-                            rect,
-                            4.0,
-                            egui::Stroke::new(2.0, egui::Color32::GREEN),
-                            egui::StrokeKind::Outside,
-                        );
-                    }
-
-                    // Draw cell content
-                    let center = rect.center();
-
-                    /*
-                    // Display index
-                    ui.painter().text(
-                        center - egui::vec2(0.0, 20.0),
-                        egui::Align2::CENTER_CENTER,
-                        format!("#{}", i + 1),
-                        egui::FontId::proportional(14.0),
-                        egui::Color32::WHITE,
-                    );
-                    */
-
-                    if has_error {
-                        // Show error icon for failed derivation
-                        ui.painter().text(
-                            center,
-                            egui::Align2::CENTER_CENTER,
-                            "⚠",
-                            egui::FontId::proportional(24.0),
-                            egui::Color32::from_rgb(255, 180, 100),
-                        );
-
-                        /*
-                        ui.painter().text(
-                            center + egui::vec2(0.0, 22.0),
-                            egui::Align2::CENTER_CENTER,
-                            "ERROR",
-                            egui::FontId::proportional(10.0),
-                            egui::Color32::from_rgb(255, 100, 100),
-                        );
-                        */
-
-                        // Show tooltip with error message on hover
-                        if let Some(err_msg) = error.filter(|_| response.hovered()) {
-                            response.show_tooltip_text(err_msg);
-                        }
-                    } else {
-                        // Normal display: icon and fitness
-                        ui.painter().text(
-                            center,
-                            egui::Align2::CENTER_CENTER,
-                            if is_selected { "🏆" } else { "🌿" },
-                            egui::FontId::proportional(24.0),
-                            egui::Color32::WHITE,
-                        );
-
-                        /*
-                        ui.painter().text(
-                            center + egui::vec2(0.0, 22.0),
-                            egui::Align2::CENTER_CENTER,
-                            format!("f:{:.0}", fitness),
-                            egui::FontId::proportional(10.0),
-                            egui::Color32::GRAY,
-                        );
-                        */
-                    }
-
-                    // Draw load button overlay in bottom-right corner
-                    let load_btn_rect = egui::Rect::from_min_size(
-                        rect.right_bottom() - egui::vec2(22.0, 22.0),
-                        egui::vec2(20.0, 20.0),
-                    );
-                    let load_hovered = response.hovered()
-                        && ui
-                            .input(|i| i.pointer.hover_pos())
-                            .map(|p| load_btn_rect.contains(p))
-                            .unwrap_or(false);
-
-                    if response.hovered() {
-                        let load_bg = if load_hovered {
-                            egui::Color32::from_rgb(80, 120, 180)
-                        } else {
-                            egui::Color32::from_rgb(60, 80, 120)
-                        };
-                        ui.painter().rect_filled(load_btn_rect, 3.0, load_bg);
-                        ui.painter().text(
-                            load_btn_rect.center(),
-                            egui::Align2::CENTER_CENTER,
-                            "📥",
-                            egui::FontId::proportional(12.0),
-                            egui::Color32::WHITE,
-                        );
-                    }
-
-                    // Handle clicks
-                    if response.clicked() {
-                        if load_hovered {
-                            // Load into editor
-                            if let Some(genotype) = nursery.get_genotype(*i) {
-                                let new_materials = genotype.get_material_settings();
-                                config.source_code = genotype.source_code;
-                                config.finalization_code = genotype.finalization_code;
-                                config.iterations = genotype.iterations;
-                                config.default_angle = genotype.angle;
-                                config.step_size = genotype.step;
-                                config.default_width = genotype.width;
-                                config.elasticity = genotype.elasticity;
-                                config.tropism =
-                                    genotype.tropism.map(|t| Vec3::new(t[0], t[1], t[2]));
-                                config.seed = genotype.seed;
-                                config.recompile_requested = true;
-                                materials.settings.clear();
-                                for (slot, mat) in new_materials {
-                                    materials.settings.insert(slot, mat);
-                                }
-                                nursery.mode = NurseryMode::Disabled;
-                            }
-                        } else {
-                            // Toggle selection
-                            nursery.toggle_selection(*i);
-                            nursery.needs_3d_rebuild = true;
-                        }
-                    }
-
-                    // End row after grid_size items
-                    if (i + 1) % grid_size == 0 {
-                        ui.end_row();
-                    }
-                }
-            });
-    }
-
-    true
 }
