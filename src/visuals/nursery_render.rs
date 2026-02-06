@@ -47,7 +47,10 @@ fn create_genotype_materials(
     cached_materials: &HashMap<u8, MaterialSettings>,
     proc_textures: &ProceduralTextures,
     materials: &mut Assets<StandardMaterial>,
-) -> (HashMap<u8, Handle<StandardMaterial>>, Handle<StandardMaterial>) {
+) -> (
+    HashMap<u8, Handle<StandardMaterial>>,
+    Handle<StandardMaterial>,
+) {
     let mut handles = HashMap::new();
     let mut primary = None;
 
@@ -263,7 +266,7 @@ pub fn render_nursery_population(
         let has_error = cached.error.is_some();
 
         // Only render meshes if derivation succeeded
-        let label_height = if let Some(ref system) = cached.system {
+        if let Some(ref system) = cached.system {
             // Configure turtle interpreter using individual genotype parameters as fallbacks
             let default_step = system
                 .constants
@@ -317,6 +320,7 @@ pub fn render_nursery_population(
                     MeshMaterial3d(material),
                     Transform::from_translation(grid_pos),
                     NurseryMeshTag { index: i },
+                    Pickable::IGNORE,
                 ));
             }
 
@@ -357,57 +361,53 @@ pub fn render_nursery_population(
                             scale: prop.scale * prop_config.prop_scale,
                         },
                         NurseryPropTag { index: i },
+                        Pickable::IGNORE,
                     ));
                 }
             }
+        }
 
-            // Calculate approximate height for the label based on props
-            let max_height = skeleton
-                .props
-                .iter()
-                .map(|p| p.position.y)
-                .fold(default_step * 50.0, |a, b| a.max(b));
-            max_height + 20.0
-        } else {
-            // No system (derivation failed) - use default height
-            cached.step * 50.0 + 20.0
-        };
-
-        // Create a colored sphere indicator above each plant
-        // Red for errors, green for selected, gray for normal
-        let indicator_size = if has_error {
-            8.0
+        // Create a translucent horizontal panel below each plant
+        // Red for errors, green for selected, gray/transparent for normal
+        let panel_size = spacing * 0.9;
+        let panel_color = if has_error {
+            Color::srgba(1.0, 0.2, 0.2, 0.35)
         } else if is_selected {
-            6.0
+            Color::srgba(0.2, 1.0, 0.2, 0.4)
         } else {
-            4.0
+            Color::srgba(0.5, 0.5, 0.6, 0.15)
         };
 
-        let indicator_color = if has_error {
-            Color::srgb(1.0, 0.2, 0.2) // Red for error
+        let panel_emissive = if has_error {
+            LinearRgba::new(0.3, 0.06, 0.06, 1.0)
         } else if is_selected {
-            Color::srgb(0.2, 1.0, 0.2) // Bright green for selected
+            LinearRgba::new(0.06, 0.3, 0.06, 1.0)
         } else {
-            Color::srgb(0.6, 0.6, 0.7) // Gray for unselected
+            LinearRgba::BLACK
         };
 
-        let indicator_mesh = meshes.add(Sphere::new(indicator_size));
-        let indicator_material = materials.add(StandardMaterial {
-            base_color: indicator_color,
-            emissive: if has_error || is_selected {
-                indicator_color.into()
-            } else {
-                LinearRgba::BLACK
-            },
+        let panel_mesh = meshes.add(Cuboid::new(panel_size, 2.0, panel_size));
+        let panel_material = materials.add(StandardMaterial {
+            base_color: panel_color,
+            emissive: panel_emissive,
+            alpha_mode: AlphaMode::Blend,
+            unlit: true,
             ..default()
         });
 
-        commands.spawn((
-            Mesh3d(indicator_mesh),
-            MeshMaterial3d(indicator_material),
-            Transform::from_translation(grid_pos + Vec3::new(0.0, label_height, 0.0)),
-            NurseryLabelTag { index: i },
-        ));
+        let panel_index = i;
+        commands
+            .spawn((
+                Mesh3d(panel_mesh),
+                MeshMaterial3d(panel_material),
+                Transform::from_translation(grid_pos + Vec3::new(0.0, -1.0, 0.0)),
+                NurseryLabelTag { index: i },
+            ))
+            .observe(
+                move |_event: On<Pointer<Click>>, mut nursery: ResMut<NurseryState>| {
+                    nursery.toggle_selection(panel_index);
+                },
+            );
     }
 }
 

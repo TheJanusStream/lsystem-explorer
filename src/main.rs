@@ -1,3 +1,4 @@
+use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
@@ -24,6 +25,7 @@ fn main() {
             }),
             EguiPlugin::default(),
             PanOrbitCameraPlugin,
+            MeshPickingPlugin,
         ))
         // Core State
         .init_resource::<LSystemConfig>()
