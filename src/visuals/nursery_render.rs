@@ -320,7 +320,6 @@ pub fn render_nursery_population(
                     MeshMaterial3d(material),
                     Transform::from_translation(grid_pos),
                     NurseryMeshTag { index: i },
-                    Pickable::IGNORE,
                 ));
             }
 
@@ -361,7 +360,6 @@ pub fn render_nursery_population(
                             scale: prop.scale * prop_config.prop_scale,
                         },
                         NurseryPropTag { index: i },
-                        Pickable::IGNORE,
                     ));
                 }
             }
@@ -395,19 +393,12 @@ pub fn render_nursery_population(
             ..default()
         });
 
-        let panel_index = i;
-        commands
-            .spawn((
-                Mesh3d(panel_mesh),
-                MeshMaterial3d(panel_material),
-                Transform::from_translation(grid_pos + Vec3::new(0.0, -1.0, 0.0)),
-                NurseryLabelTag { index: i },
-            ))
-            .observe(
-                move |_event: On<Pointer<Click>>, mut nursery: ResMut<NurseryState>| {
-                    nursery.toggle_selection(panel_index);
-                },
-            );
+        commands.spawn((
+            Mesh3d(panel_mesh),
+            MeshMaterial3d(panel_material),
+            Transform::from_translation(grid_pos + Vec3::new(0.0, -1.0, 0.0)),
+            NurseryLabelTag { index: i },
+        ));
     }
 }
 
@@ -419,5 +410,69 @@ pub fn update_nursery_selection(
     if nursery.is_changed() && nursery.mode == NurseryMode::Enabled {
         // Mark cache dirty to refresh selection indicators
         cache.dirty = true;
+    }
+}
+
+/// System that handles clicking on nursery selection panels via ray-plane intersection.
+///
+/// Uses camera raycasting against the y=0 ground plane to determine which grid cell
+/// was clicked, bypassing the picking message pipeline to avoid conflicts with bevy_egui.
+pub fn handle_panel_clicks(
+    mouse: Res<ButtonInput<MouseButton>>,
+    windows: Query<&Window>,
+    cameras: Query<(&Camera, &GlobalTransform)>,
+    mut nursery: ResMut<NurseryState>,
+    egui_wants: Res<bevy_egui::input::EguiWantsInput>,
+) {
+    if !mouse.just_pressed(MouseButton::Left) || nursery.mode != NurseryMode::Enabled {
+        return;
+    }
+
+    // Don't intercept clicks when the pointer is over the egui UI
+    if egui_wants.is_pointer_over_area() {
+        return;
+    }
+
+    let Ok(window) = windows.single() else {
+        return;
+    };
+    let Some(cursor_pos) = window.cursor_position() else {
+        return;
+    };
+    let Ok((camera, camera_transform)) = cameras.single() else {
+        return;
+    };
+    let Ok(ray) = camera.viewport_to_world(camera_transform, cursor_pos) else {
+        return;
+    };
+
+    // Intersect ray with y=0 ground plane
+    let plane_y = -1.0_f32;
+    let denom = ray.direction.y;
+    if denom.abs() < 1e-6 {
+        return; // Ray is parallel to the ground plane
+    }
+    let t = (plane_y - ray.origin.y) / denom;
+    if t < 0.0 {
+        return; // Intersection is behind the camera
+    }
+    let hit_point = ray.origin + *ray.direction * t;
+
+    // Map hit point to grid cell
+    let spacing = nursery.grid_spacing;
+    let grid_size = nursery.grid_size;
+    let grid_offset = (grid_size as f32 - 1.0) * spacing / 2.0;
+    let half_panel = spacing * 0.45; // panel is spacing * 0.9 wide
+
+    for i in 0..nursery.population_size() {
+        let row = i / grid_size;
+        let col = i % grid_size;
+        let cx = col as f32 * spacing - grid_offset;
+        let cz = row as f32 * spacing - grid_offset;
+
+        if (hit_point.x - cx).abs() <= half_panel && (hit_point.z - cz).abs() <= half_panel {
+            nursery.toggle_selection(i);
+            return;
+        }
     }
 }

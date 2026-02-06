@@ -1,4 +1,3 @@
-use bevy::picking::mesh_picking::MeshPickingPlugin;
 use bevy::prelude::*;
 use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
 use bevy_panorbit_camera::PanOrbitCameraPlugin;
@@ -25,7 +24,6 @@ fn main() {
             }),
             EguiPlugin::default(),
             PanOrbitCameraPlugin,
-            MeshPickingPlugin,
         ))
         // Core State
         .init_resource::<LSystemConfig>()
@@ -67,6 +65,7 @@ fn main() {
                 visuals::nursery_render::rebuild_nursery_cache,
                 visuals::nursery_render::render_nursery_population,
                 visuals::nursery_render::update_nursery_selection,
+                visuals::nursery_render::handle_panel_clicks,
                 bevy_symbios::materials::sync_material_properties,
                 visuals::turtle::sync_prop_materials,
                 visuals::export::batch_export_system,
