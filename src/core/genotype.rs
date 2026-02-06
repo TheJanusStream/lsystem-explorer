@@ -92,6 +92,10 @@ pub struct PlantGenotype {
     pub step: f32,
     /// Default branch width.
     pub width: f32,
+    /// Elasticity factor for tropism bending.
+    pub elasticity: f32,
+    /// Tropism direction vector stored as \[x, y, z\] for serialization.
+    pub tropism: Option<[f32; 3]>,
     /// Random seed for stochastic rules.
     pub seed: u64,
 }
@@ -107,6 +111,8 @@ impl PlantGenotype {
             angle: 25.0,
             step: 1.0,
             width: 0.1,
+            elasticity: 0.0,
+            tropism: None,
             seed: 42,
         }
     }
@@ -175,6 +181,8 @@ impl PlantGenotype {
             angle: preset.angle,
             step: preset.step,
             width: preset.width,
+            elasticity: preset.elasticity,
+            tropism: preset.tropism.map(|v| [v.x, v.y, v.z]),
             seed: 42,
         }
     }
@@ -460,6 +468,16 @@ impl Genotype for PlantGenotype {
             angle: self.angle * blend + other.angle * inv_blend,
             step: self.step * blend + other.step * inv_blend,
             width: self.width * blend + other.width * inv_blend,
+            elasticity: self.elasticity * blend + other.elasticity * inv_blend,
+            tropism: match (&self.tropism, &other.tropism) {
+                (Some(a), Some(b)) => Some([
+                    a[0] * blend + b[0] * inv_blend,
+                    a[1] * blend + b[1] * inv_blend,
+                    a[2] * blend + b[2] * inv_blend,
+                ]),
+                (Some(t), None) | (None, Some(t)) => Some(*t),
+                (None, None) => None,
+            },
             seed: rng.random::<u64>(),
         }
     }

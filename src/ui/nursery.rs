@@ -3,7 +3,7 @@
 //! This module provides a grid-based interface for visualizing and evolving
 //! populations of plant genotypes using genetic algorithms.
 
-use crate::core::config::{LSystemConfig, MaterialSettingsMap};
+use crate::core::config::{LSystemConfig, MaterialSettings, MaterialSettingsMap};
 use crate::core::genotype::PlantGenotype;
 use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
@@ -49,6 +49,12 @@ pub struct CachedGenotypeMesh {
     pub step: f32,
     /// Individual's default branch width.
     pub width: f32,
+    /// Individual's elasticity factor for tropism bending.
+    pub elasticity: f32,
+    /// Individual's tropism direction vector.
+    pub tropism: Option<Vec3>,
+    /// Individual's material settings by slot ID.
+    pub materials: HashMap<u8, MaterialSettings>,
     /// Error message if derivation failed.
     pub error: Option<String>,
 }
@@ -143,7 +149,7 @@ impl NurseryState {
         materials: &MaterialSettingsMap,
     ) {
         // Create base genotype from current editor state
-        let base = PlantGenotype::new(config.source_code.clone())
+        let mut base = PlantGenotype::new(config.source_code.clone())
             .with_finalization(config.finalization_code.clone())
             .with_materials(&materials.settings)
             .with_params(
@@ -153,6 +159,8 @@ impl NurseryState {
                 config.default_width,
             )
             .with_seed(config.seed);
+        base.elasticity = config.elasticity;
+        base.tropism = config.tropism.map(|v| [v.x, v.y, v.z]);
 
         let pop_size = self.population_size();
         let mut rng = Pcg64::seed_from_u64(self.seed);
@@ -622,6 +630,9 @@ pub fn nursery_ui(
                                 config.default_angle = genotype.angle;
                                 config.step_size = genotype.step;
                                 config.default_width = genotype.width;
+                                config.elasticity = genotype.elasticity;
+                                config.tropism =
+                                    genotype.tropism.map(|t| Vec3::new(t[0], t[1], t[2]));
                                 config.seed = genotype.seed;
                                 config.recompile_requested = true;
                                 materials.settings.clear();

@@ -3,19 +3,72 @@
 //! This module provides systems to render the 9-individual population
 //! as a 3D grid when nursery mode is active.
 
-use crate::core::config::{LSystemConfig, PropConfig, PropMeshType};
+use crate::core::config::{LSystemConfig, MaterialSettings, PropConfig, PropMeshType, TextureType};
 use crate::core::genotype::PlantGenotype;
 use crate::ui::nursery::{
     CachedGenotypeMesh, NurseryLabelTag, NurseryMeshTag, NurseryMode, NurseryPropTag, NurseryState,
     PopulationMeshCache,
 };
 use crate::visuals::assets::PropMeshAssets;
-use crate::visuals::turtle::{PropMaterialCache, PropMaterialKey, get_or_create_prop_material};
+use bevy::math::{Affine2, Vec2};
+use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
 use bevy_symbios::LSystemMeshBuilder;
-use bevy_symbios::materials::MaterialPalette;
+use bevy_symbios::materials::ProceduralTextures;
 use symbios::System;
 use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
+
+/// Creates a StandardMaterial from a MaterialSettings, using procedural textures if available.
+fn material_from_settings(
+    settings: &MaterialSettings,
+    proc_textures: &ProceduralTextures,
+) -> StandardMaterial {
+    let emission_linear =
+        Color::srgb_from_array(settings.emission_color).to_linear() * settings.emission_strength;
+
+    let base_color_texture = match settings.texture {
+        TextureType::None => None,
+        other => proc_textures.textures.get(&other).cloned(),
+    };
+
+    StandardMaterial {
+        base_color: Color::srgb_from_array(settings.base_color),
+        perceptual_roughness: settings.roughness,
+        metallic: settings.metallic,
+        emissive: emission_linear,
+        base_color_texture,
+        uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
+        ..default()
+    }
+}
+
+/// Creates per-genotype material handles from the cached material settings.
+fn create_genotype_materials(
+    cached_materials: &HashMap<u8, MaterialSettings>,
+    proc_textures: &ProceduralTextures,
+    materials: &mut Assets<StandardMaterial>,
+) -> (HashMap<u8, Handle<StandardMaterial>>, Handle<StandardMaterial>) {
+    let mut handles = HashMap::new();
+    let mut primary = None;
+
+    for (&slot, settings) in cached_materials {
+        let handle = materials.add(material_from_settings(settings, proc_textures));
+        if primary.is_none() {
+            primary = Some(handle.clone());
+        }
+        handles.insert(slot, handle);
+    }
+
+    let fallback = primary.unwrap_or_else(|| {
+        materials.add(StandardMaterial {
+            base_color: Color::srgb(0.55, 0.27, 0.07),
+            perceptual_roughness: 0.8,
+            ..default()
+        })
+    });
+
+    (handles, fallback)
+}
 
 /// Derives a PlantGenotype into a System with full state.
 ///
@@ -130,6 +183,9 @@ pub fn rebuild_nursery_cache(
                 angle: genotype.angle,
                 step: genotype.step,
                 width: genotype.width,
+                elasticity: genotype.elasticity,
+                tropism: genotype.tropism.map(|t| Vec3::new(t[0], t[1], t[2])),
+                materials: genotype.get_material_settings(),
                 error,
             },
         );
@@ -149,8 +205,7 @@ pub fn render_nursery_population(
     prop_config: Res<PropConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    palette: Res<MaterialPalette>,
-    mut prop_material_cache: ResMut<PropMaterialCache>,
+    proc_textures: Res<ProceduralTextures>,
     prop_assets: Res<PropMeshAssets>,
     // Queries for existing nursery entities
     old_meshes: Query<Entity, With<NurseryMeshTag>>,
@@ -233,8 +288,8 @@ pub fn render_nursery_population(
                 default_step,
                 default_angle,
                 initial_width,
-                tropism: config.tropism,
-                elasticity: config.elasticity,
+                tropism: cached.tropism,
+                elasticity: cached.elasticity,
                 max_stack_depth: 1024,
             };
 
@@ -246,12 +301,15 @@ pub fn render_nursery_population(
             let builder = LSystemMeshBuilder::new().with_resolution(config.mesh_resolution);
             let mesh_buckets = builder.build(&skeleton);
 
+            // Create per-genotype material handles from the individual's settings
+            let (geno_materials, geno_fallback) =
+                create_genotype_materials(&cached.materials, &proc_textures, &mut materials);
+
             // Spawn branch meshes
             for (material_id, mesh) in mesh_buckets {
-                let material = palette
-                    .materials
+                let material = geno_materials
                     .get(&material_id)
-                    .unwrap_or(&palette.primary_material)
+                    .unwrap_or(&geno_fallback)
                     .clone();
 
                 commands.spawn((
@@ -273,15 +331,22 @@ pub fn render_nursery_population(
                 let mesh_handle = prop_assets.meshes.get(&mesh_type);
 
                 if let Some(handle) = mesh_handle {
-                    let key = PropMaterialKey::new(prop.material_id, prop.color);
-                    let prop_material = get_or_create_prop_material(
-                        &mut prop_material_cache,
-                        &mut materials,
-                        &palette,
-                        key,
-                        prop.material_id,
-                        prop.color,
+                    // Create prop material by blending genotype material with prop color
+                    let base_handle = geno_materials
+                        .get(&prop.material_id)
+                        .unwrap_or(&geno_fallback);
+                    let base_mat = materials.get(base_handle).cloned().unwrap_or_default();
+                    let base_srgba = base_mat.base_color.to_srgba();
+                    let blended = Color::srgba(
+                        base_srgba.red * prop.color.x,
+                        base_srgba.green * prop.color.y,
+                        base_srgba.blue * prop.color.z,
+                        base_srgba.alpha * prop.color.w,
                     );
+                    let prop_material = materials.add(StandardMaterial {
+                        base_color: blended,
+                        ..base_mat
+                    });
 
                     commands.spawn((
                         Mesh3d(handle.clone()),
