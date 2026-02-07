@@ -550,7 +550,13 @@ pub fn ui_system(
                 }
                 // End of more editor-only sections
 
-                nursery_ui(ui, &mut nursery, &mut config, &mut material_settings);
+                nursery_ui(
+                    ui,
+                    &mut nursery,
+                    &mut config,
+                    &mut material_settings,
+                    &mut prop_config,
+                );
             });
     }
 }

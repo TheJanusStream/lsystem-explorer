@@ -16,7 +16,7 @@ use symbios::system::crossover::CrossoverConfig;
 use symbios::system::mutate::{MutationConfig, StructuralMutationConfig};
 use symbios_genetics::Genotype;
 
-use crate::core::config::{scan_max_material_id, split_source_code};
+use crate::core::config::{PropMeshType, scan_max_material_id, split_source_code};
 use crate::core::presets::LSystemPreset;
 
 /// Serializable version of material settings for genetic storage.
@@ -98,6 +98,9 @@ pub struct PlantGenotype {
     pub tropism: Option<[f32; 3]>,
     /// Random seed for stochastic rules.
     pub seed: u64,
+    /// Prop ID to mesh type mapping, persisted so nursery champions retain their prop visuals.
+    #[serde(default)]
+    pub prop_mappings: HashMap<u16, PropMeshType>,
 }
 
 impl PlantGenotype {
@@ -114,6 +117,7 @@ impl PlantGenotype {
             elasticity: 0.0,
             tropism: None,
             seed: 42,
+            prop_mappings: HashMap::new(),
         }
     }
 
@@ -184,6 +188,7 @@ impl PlantGenotype {
             elasticity: preset.elasticity,
             tropism: preset.tropism.map(|v| [v.x, v.y, v.z]),
             seed: 42,
+            prop_mappings: HashMap::new(),
         }
     }
 
@@ -535,6 +540,11 @@ impl Genotype for PlantGenotype {
                 (None, None) => None,
             },
             seed: rng.random::<u64>(),
+            prop_mappings: if rng.random::<bool>() {
+                self.prop_mappings.clone()
+            } else {
+                other.prop_mappings.clone()
+            },
         }
     }
 }

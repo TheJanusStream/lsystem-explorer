@@ -3,7 +3,7 @@
 //! This module provides a grid-based interface for visualizing and evolving
 //! populations of plant genotypes using genetic algorithms.
 
-use crate::core::config::{LSystemConfig, MaterialSettings, MaterialSettingsMap};
+use crate::core::config::{LSystemConfig, MaterialSettings, MaterialSettingsMap, PropConfig};
 use crate::core::genotype::PlantGenotype;
 use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
@@ -158,6 +158,7 @@ impl NurseryState {
         &mut self,
         config: &LSystemConfig,
         materials: &MaterialSettingsMap,
+        prop_config: &PropConfig,
     ) {
         // Create base genotype from current editor state
         let mut base = PlantGenotype::new(config.source_code.clone())
@@ -172,6 +173,7 @@ impl NurseryState {
             .with_seed(config.seed);
         base.elasticity = config.elasticity;
         base.tropism = config.tropism.map(|v| [v.x, v.y, v.z]);
+        base.prop_mappings = prop_config.prop_meshes.clone();
 
         let pop_size = self.population_size();
         let mut rng = Pcg64::seed_from_u64(mix_seed(self.seed, 0, 0));
@@ -394,6 +396,7 @@ pub fn nursery_ui(
     nursery: &mut NurseryState,
     config: &mut LSystemConfig,
     materials: &mut MaterialSettingsMap,
+    prop_config: &mut PropConfig,
 ) {
     if nursery.mode == NurseryMode::Enabled {
         ui.horizontal(|ui| {
@@ -423,7 +426,7 @@ pub fn nursery_ui(
                 .on_hover_text("Reset population from current editor")
                 .clicked()
             {
-                nursery.initialize_from_editor(config, materials);
+                nursery.initialize_from_editor(config, materials, prop_config);
                 nursery.needs_3d_rebuild = true;
             }
         });
@@ -602,6 +605,8 @@ pub fn nursery_ui(
                                     for (slot, mat) in new_materials {
                                         materials.settings.insert(slot, mat);
                                     }
+                                    // Restore prop configuration from genotype
+                                    prop_config.prop_meshes = genotype.prop_mappings;
                                     nursery.mode = NurseryMode::Disabled;
                                 }
                             } else {
@@ -633,7 +638,7 @@ pub fn nursery_ui(
                 .min_size(egui::vec2(ui.available_width(), 28.0));
 
             if ui.add(button).clicked() {
-                nursery.initialize_from_editor(config, materials);
+                nursery.initialize_from_editor(config, materials, prop_config);
                 nursery.needs_3d_rebuild = true;
                 nursery.mode = NurseryMode::Enabled;
             }

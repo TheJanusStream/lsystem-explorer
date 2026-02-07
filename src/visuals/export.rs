@@ -180,6 +180,13 @@ fn merge_prop_into_bucket(
             _ => None,
         });
 
+    let src_uvs = source_mesh
+        .attribute(Mesh::ATTRIBUTE_UV_0)
+        .and_then(|a| match a {
+            VertexAttributeValues::Float32x2(v) => Some(v),
+            _ => None,
+        });
+
     // Transform vertices
     let combined_scale = prop.scale * prop_scale;
     let mut transformed_positions: Vec<[f32; 3]> = Vec::with_capacity(src_positions.len());
@@ -225,7 +232,7 @@ fn merge_prop_into_bucket(
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, Vec::<[f32; 3]>::new());
         mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, Vec::<[f32; 3]>::new());
         mesh.insert_attribute(Mesh::ATTRIBUTE_COLOR, Vec::<[f32; 4]>::new());
-        mesh.remove_attribute(Mesh::ATTRIBUTE_UV_0);
+        mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, Vec::<[f32; 2]>::new());
         mesh.insert_indices(Indices::U32(Vec::new()));
         mesh
     });
@@ -252,6 +259,17 @@ fn merge_prop_into_bucket(
         bucket.attribute_mut(Mesh::ATTRIBUTE_COLOR)
     {
         bucket_colors.extend(transformed_colors);
+    }
+
+    // Append UVs (use source UVs or zero placeholders to maintain vertex count alignment)
+    if let Some(VertexAttributeValues::Float32x2(bucket_uvs)) =
+        bucket.attribute_mut(Mesh::ATTRIBUTE_UV_0)
+    {
+        if let Some(uvs) = src_uvs {
+            bucket_uvs.extend(uvs.iter().copied());
+        } else {
+            bucket_uvs.extend(std::iter::repeat_n([0.0, 0.0], src_positions.len()));
+        }
     }
 
     // Append indices with offset

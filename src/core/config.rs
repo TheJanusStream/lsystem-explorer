@@ -18,7 +18,9 @@ pub struct DirtyFlags {
 }
 
 /// Available prop mesh types for prop IDs
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Default, serde::Serialize, serde::Deserialize,
+)]
 pub enum PropMeshType {
     #[default]
     Leaf,
