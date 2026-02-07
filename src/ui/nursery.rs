@@ -596,9 +596,8 @@ pub fn nursery_ui(
                                     nursery.mode = NurseryMode::Disabled;
                                 }
                             } else {
-                                // Toggle selection
+                                // Toggle selection (visuals updated by sync_nursery_selection_visuals)
                                 nursery.toggle_selection(*i);
-                                nursery.needs_3d_rebuild = true;
                             }
                         }
 

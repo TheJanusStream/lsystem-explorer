@@ -48,6 +48,7 @@ fn main() {
                 bevy_symbios::materials::setup_material_assets,
                 visuals::assets::setup_prop_assets,
                 core::config::apply_startup_preset,
+                visuals::nursery_render::setup_nursery_materials,
             )
                 .chain(),
         )
@@ -64,7 +65,7 @@ fn main() {
                 visuals::turtle::toggle_editor_visibility,
                 visuals::nursery_render::rebuild_nursery_cache,
                 visuals::nursery_render::render_nursery_population,
-                visuals::nursery_render::update_nursery_selection,
+                visuals::nursery_render::sync_nursery_selection_visuals,
                 visuals::nursery_render::handle_panel_clicks,
                 bevy_symbios::materials::sync_material_properties,
                 visuals::turtle::sync_prop_materials,

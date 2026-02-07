@@ -16,7 +16,7 @@ use symbios::system::crossover::CrossoverConfig;
 use symbios::system::mutate::{MutationConfig, StructuralMutationConfig};
 use symbios_genetics::Genotype;
 
-use crate::core::config::split_source_code;
+use crate::core::config::{scan_max_material_id, split_source_code};
 use crate::core::presets::LSystemPreset;
 
 /// Serializable version of material settings for genetic storage.
@@ -307,13 +307,13 @@ impl PlantGenotype {
             if rng.random::<f32>() < rate {
                 // Mutate base color slightly
                 for channel in &mut settings.base_color {
-                    *channel = (*channel + (rng.random::<f32>() - 0.5) * 0.1).clamp(0.0, 1.0);
+                    *channel = (*channel + (rng.random::<f32>() - 0.5) * 0.3).clamp(0.0, 1.0);
                 }
             }
             if rng.random::<f32>() < rate * 0.5 {
                 // Occasionally mutate roughness/metallic
                 settings.roughness =
-                    (settings.roughness + (rng.random::<f32>() - 0.5) * 0.1).clamp(0.0, 1.0);
+                    (settings.roughness + (rng.random::<f32>() - 0.5) * 0.3).clamp(0.0, 1.0);
             }
         }
     }
@@ -402,6 +402,49 @@ impl Genotype for PlantGenotype {
         // Reconstruct source from mutated system
         self.source_code = Self::reconstruct_source(&system, &self.source_code);
 
+        // Mutate finalization code if present
+        if !self.finalization_code.trim().is_empty() {
+            let mut fin_system = System::new();
+            let mut fin_valid = true;
+            for line in self.finalization_code.lines() {
+                let trimmed = line.trim();
+                if trimmed.is_empty() || trimmed.starts_with("//") {
+                    continue;
+                }
+                if trimmed.starts_with('#') {
+                    if fin_system.add_directive(trimmed).is_err() {
+                        fin_valid = false;
+                        break;
+                    }
+                } else if trimmed.contains("->") && fin_system.add_rule(trimmed).is_err() {
+                    fin_valid = false;
+                    break;
+                }
+            }
+            if fin_valid {
+                fin_system.mutate_with_rng(rng, &mutation_config);
+                self.finalization_code =
+                    Self::reconstruct_source(&fin_system, &self.finalization_code);
+            }
+        }
+
+        // Ensure materials map covers all material IDs referenced in source
+        let max_id = scan_max_material_id(&self.source_code)
+            .max(scan_max_material_id(&self.finalization_code));
+        for id in 0..=max_id {
+            self.materials
+                .entry(id)
+                .or_insert_with(|| SerializableMaterial {
+                    base_color: [
+                        rng.random::<f32>(),
+                        rng.random::<f32>(),
+                        rng.random::<f32>(),
+                    ],
+                    roughness: 0.3 + rng.random::<f32>() * 0.5,
+                    ..SerializableMaterial::default()
+                });
+        }
+
         // Mutate materials
         self.mutate_materials(rng, rate);
 
@@ -414,6 +457,19 @@ impl Genotype for PlantGenotype {
         }
         if rng.random::<f32>() < rate * 0.2 {
             self.width = (self.width * (0.9 + rng.random::<f32>() * 0.2)).clamp(0.01, 1.0);
+        }
+
+        // Mutate elasticity
+        if rng.random::<f32>() < rate * 0.2 {
+            self.elasticity = (self.elasticity + (rng.random::<f32>() - 0.5) * 0.2).clamp(0.0, 1.0);
+        }
+
+        // Mutate tropism vector
+        if rng.random::<f32>() < rate * 0.2 {
+            let t = self.tropism.get_or_insert([0.0, -1.0, 0.0]);
+            for component in t.iter_mut() {
+                *component += (rng.random::<f32>() - 0.5) * 0.3;
+            }
         }
 
         // Mutate seed for different stochastic outcomes

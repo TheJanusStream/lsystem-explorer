@@ -264,6 +264,38 @@ pub struct DerivationTask {
     pub cancel_flag: Option<CancellationFlag>,
 }
 
+/// Scans source code for material ID usage patterns: `,(N)` where N is a number.
+/// Returns the maximum material ID found, or 0 if none.
+pub fn scan_max_material_id(source: &str) -> u8 {
+    let mut max_id: u8 = 0;
+    let bytes = source.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        // Look for `,` followed by `(`
+        if bytes[i] == b',' && i + 1 < bytes.len() && bytes[i + 1] == b'(' {
+            i += 2; // Skip `,(`
+
+            // Parse the number
+            let start = i;
+            while i < bytes.len() && bytes[i].is_ascii_digit() {
+                i += 1;
+            }
+
+            if let Some(num) = std::str::from_utf8(&bytes[start..i])
+                .ok()
+                .and_then(|s| s.parse::<u8>().ok())
+            {
+                max_id = max_id.max(num);
+            }
+        } else {
+            i += 1;
+        }
+    }
+
+    max_id
+}
+
 /// Configuration for batch export
 #[derive(Resource)]
 pub struct ExportConfig {

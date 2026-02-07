@@ -1,6 +1,6 @@
 use crate::core::config::{
     CancellationFlag, DerivationResult, DerivationStatus, DerivationTask, DirtyFlags,
-    LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsMap,
+    LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsMap, scan_max_material_id,
 };
 use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
@@ -293,36 +293,4 @@ fn perform_derivation(
         analysis,
         derivation_time_ms: (chrono::Utc::now() - start_time).num_milliseconds() as f32,
     })
-}
-
-/// Scans source code for material ID usage patterns: `,(N)` where N is a number.
-/// Returns the maximum material ID found, or 0 if none.
-fn scan_max_material_id(source: &str) -> u8 {
-    let mut max_id: u8 = 0;
-    let bytes = source.as_bytes();
-    let mut i = 0;
-
-    while i < bytes.len() {
-        // Look for `,` followed by `(`
-        if bytes[i] == b',' && i + 1 < bytes.len() && bytes[i + 1] == b'(' {
-            i += 2; // Skip `,(`
-
-            // Parse the number
-            let start = i;
-            while i < bytes.len() && bytes[i].is_ascii_digit() {
-                i += 1;
-            }
-
-            if let Some(num) = std::str::from_utf8(&bytes[start..i])
-                .ok()
-                .and_then(|s| s.parse::<u8>().ok())
-            {
-                max_id = max_id.max(num);
-            }
-        } else {
-            i += 1;
-        }
-    }
-
-    max_id
 }

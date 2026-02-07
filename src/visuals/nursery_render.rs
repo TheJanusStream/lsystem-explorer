@@ -18,6 +18,62 @@ use bevy_symbios::materials::ProceduralTextures;
 use symbios::System;
 use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
 
+/// Cached material handles for nursery selection panels.
+/// Created once at startup to avoid per-frame allocations.
+#[derive(Resource)]
+pub struct NurseryMaterials {
+    pub normal: Handle<StandardMaterial>,
+    pub selected: Handle<StandardMaterial>,
+    pub error: Handle<StandardMaterial>,
+}
+
+impl NurseryMaterials {
+    pub fn new(materials: &mut Assets<StandardMaterial>) -> Self {
+        Self {
+            normal: materials.add(StandardMaterial {
+                base_color: Color::srgba(0.5, 0.5, 0.6, 0.15),
+                emissive: LinearRgba::BLACK,
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            }),
+            selected: materials.add(StandardMaterial {
+                base_color: Color::srgba(0.0, 0.39, 0.0, 0.4),
+                emissive: LinearRgba::new(0.06, 0.3, 0.06, 1.0),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            }),
+            error: materials.add(StandardMaterial {
+                base_color: Color::srgba(1.0, 0.2, 0.2, 0.35),
+                emissive: LinearRgba::new(0.3, 0.06, 0.06, 1.0),
+                alpha_mode: AlphaMode::Blend,
+                unlit: true,
+                ..default()
+            }),
+        }
+    }
+
+    /// Returns the appropriate material handle for a given panel state.
+    pub fn for_state(&self, is_selected: bool, has_error: bool) -> Handle<StandardMaterial> {
+        if has_error {
+            self.error.clone()
+        } else if is_selected {
+            self.selected.clone()
+        } else {
+            self.normal.clone()
+        }
+    }
+}
+
+/// Startup system to create cached nursery panel materials.
+pub fn setup_nursery_materials(
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut commands: Commands,
+) {
+    commands.insert_resource(NurseryMaterials::new(&mut materials));
+}
+
 /// Creates a StandardMaterial from a MaterialSettings, using procedural textures if available.
 fn material_from_settings(
     settings: &MaterialSettings,
@@ -211,6 +267,7 @@ pub fn render_nursery_population(
     proc_textures: Res<ProceduralTextures>,
     prop_assets: Res<PropMeshAssets>,
     // Queries for existing nursery entities
+    nursery_materials: Res<NurseryMaterials>,
     old_meshes: Query<Entity, With<NurseryMeshTag>>,
     old_props: Query<Entity, With<NurseryPropTag>>,
     old_labels: Query<Entity, With<NurseryLabelTag>>,
@@ -366,32 +423,9 @@ pub fn render_nursery_population(
         }
 
         // Create a translucent horizontal panel below each plant
-        // Red for errors, green for selected, gray/transparent for normal
         let panel_size = spacing * 0.9;
-        let panel_color = if has_error {
-            Color::srgba(1.0, 0.2, 0.2, 0.35)
-        } else if is_selected {
-            Color::srgba(0.0, 0.39, 0.0, 0.4)
-        } else {
-            Color::srgba(0.5, 0.5, 0.6, 0.15)
-        };
-
-        let panel_emissive = if has_error {
-            LinearRgba::new(0.3, 0.06, 0.06, 1.0)
-        } else if is_selected {
-            LinearRgba::new(0.06, 0.3, 0.06, 1.0)
-        } else {
-            LinearRgba::BLACK
-        };
-
         let panel_mesh = meshes.add(Cuboid::new(panel_size, 2.0, panel_size));
-        let panel_material = materials.add(StandardMaterial {
-            base_color: panel_color,
-            emissive: panel_emissive,
-            alpha_mode: AlphaMode::Blend,
-            unlit: true,
-            ..default()
-        });
+        let panel_material = nursery_materials.for_state(is_selected, has_error);
 
         commands.spawn((
             Mesh3d(panel_mesh),
@@ -402,14 +436,28 @@ pub fn render_nursery_population(
     }
 }
 
-/// System to update selection indicators when selection changes.
-pub fn update_nursery_selection(
+/// System to update panel materials in-place when selection changes.
+/// This avoids a full scene rebuild by only swapping material handles.
+pub fn sync_nursery_selection_visuals(
     nursery: Res<NurseryState>,
-    mut cache: ResMut<PopulationMeshCache>,
+    nursery_materials: Res<NurseryMaterials>,
+    cache: Res<PopulationMeshCache>,
+    mut labels: Query<(&NurseryLabelTag, &mut MeshMaterial3d<StandardMaterial>)>,
 ) {
-    if nursery.is_changed() && nursery.mode == NurseryMode::Enabled {
-        // Mark cache dirty to refresh selection indicators
-        cache.dirty = true;
+    if !nursery.is_changed() || nursery.mode != NurseryMode::Enabled {
+        return;
+    }
+
+    for (tag, mut mat_handle) in labels.iter_mut() {
+        let is_selected = nursery.selected.contains(&tag.index);
+        let has_error = cache
+            .entries
+            .get(&tag.index)
+            .is_some_and(|c| c.error.is_some());
+        let desired = nursery_materials.for_state(is_selected, has_error);
+        if mat_handle.0 != desired {
+            mat_handle.0 = desired;
+        }
     }
 }
 
