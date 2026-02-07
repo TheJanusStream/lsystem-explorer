@@ -3,7 +3,9 @@
 //! This module provides a grid-based interface for visualizing and evolving
 //! populations of plant genotypes using genetic algorithms.
 
-use crate::core::config::{LSystemConfig, MaterialSettings, MaterialSettingsMap, PropConfig};
+use crate::core::config::{
+    LSystemConfig, MaterialSettings, MaterialSettingsMap, PropConfig, PropMeshType,
+};
 use crate::core::genotype::PlantGenotype;
 use bevy::platform::collections::{HashMap, HashSet};
 use bevy::prelude::*;
@@ -66,6 +68,8 @@ pub struct CachedGenotypeMesh {
     pub tropism: Option<Vec3>,
     /// Individual's material settings by slot ID.
     pub materials: HashMap<u8, MaterialSettings>,
+    /// Individual's prop ID to mesh type mapping.
+    pub prop_mappings: HashMap<u16, PropMeshType>,
     /// Error message if derivation failed.
     pub error: Option<String>,
 }

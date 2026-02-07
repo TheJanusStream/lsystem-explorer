@@ -188,7 +188,7 @@ impl PlantGenotype {
             elasticity: preset.elasticity,
             tropism: preset.tropism.map(|v| [v.x, v.y, v.z]),
             seed: 42,
-            prop_mappings: HashMap::new(),
+            prop_mappings: preset.prop_meshes.iter().copied().collect(),
         }
     }
 

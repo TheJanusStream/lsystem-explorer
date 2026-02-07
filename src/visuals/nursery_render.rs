@@ -317,6 +317,7 @@ pub fn poll_nursery_derivation(
                 elasticity: result.genotype.elasticity,
                 tropism: result.genotype.tropism.map(|t| Vec3::new(t[0], t[1], t[2])),
                 materials: result.genotype.get_material_settings(),
+                prop_mappings: result.genotype.prop_mappings.clone(),
                 error: result.error,
             },
         );
@@ -454,9 +455,11 @@ pub fn render_nursery_population(
 
             // Spawn props (leaves, flowers, etc.)
             for prop in &skeleton.props {
-                let mesh_type = prop_config
-                    .prop_meshes
+                // Use per-genotype prop mapping first, fall back to global PropConfig
+                let mesh_type = cached
+                    .prop_mappings
                     .get(&prop.prop_id)
+                    .or_else(|| prop_config.prop_meshes.get(&prop.prop_id))
                     .copied()
                     .unwrap_or(PropMeshType::Leaf);
 

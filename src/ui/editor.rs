@@ -99,6 +99,10 @@ pub fn ui_system(
                                                 }
                                             }
 
+                                            // Apply preset prop configuration
+                                            prop_config.prop_meshes =
+                                                preset.prop_meshes.iter().copied().collect();
+
                                             config.recompile_requested = true;
                                             debounce.pending = false;
                                         }

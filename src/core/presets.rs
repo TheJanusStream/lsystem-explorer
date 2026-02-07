@@ -1,6 +1,6 @@
 use bevy::math::Vec3;
 
-use crate::core::config::TextureType;
+use crate::core::config::{PropMeshType, TextureType};
 
 /// Preset material configuration for material slot 0.
 #[derive(Clone, Copy)]
@@ -63,6 +63,8 @@ pub struct LSystemPreset {
     pub materials: &'static [(u8, PresetMaterial)],
     /// Camera settings override.
     pub camera: Option<PresetCamera>,
+    /// Prop ID to mesh type mapping.
+    pub prop_meshes: &'static [(u16, PropMeshType)],
 }
 
 pub const PRESETS: &[LSystemPreset] = &[
@@ -94,6 +96,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             pitch: 0.0,
             yaw: 0.0,
         }),
+        prop_meshes: &[],
     },
     LSystemPreset {
         name: "Sierpinski gasket (ABOP Fig 1.10 (b))",
@@ -123,6 +126,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             pitch: 0.0,
             yaw: 0.0,
         }),
+        prop_meshes: &[],
     },
     LSystemPreset {
         name: "Branching pattern (ABOP Fig 1.39)",
@@ -152,6 +156,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             pitch: 0.0,
             yaw: 0.0,
         }),
+        prop_meshes: &[],
     },
     LSystemPreset {
         name: "Monopodial Tree (ABOP Fig 2.6)",
@@ -181,6 +186,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             pitch: 0.0,
             yaw: 0.0,
         }),
+        prop_meshes: &[],
     },
     LSystemPreset {
         name: "Sympodial Tree (ABOP Fig 2.7)",
@@ -210,6 +216,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             pitch: 0.0,
             yaw: 0.0,
         }),
+        prop_meshes: &[],
     },
     LSystemPreset {
         name: "Ternary Tree (Gravity) (ABOP Fig 2.8)",
@@ -239,6 +246,7 @@ pub const PRESETS: &[LSystemPreset] = &[
             pitch: std::f32::consts::TAU / 64.0,
             yaw: std::f32::consts::TAU / 5.0,
         }),
+        prop_meshes: &[],
     },
     LSystemPreset {
         name: "Ternary Tree (+Props +Materials +Variations)",
@@ -294,5 +302,6 @@ pub const PRESETS: &[LSystemPreset] = &[
             pitch: std::f32::consts::TAU / 64.0,
             yaw: std::f32::consts::TAU / 5.0,
         }),
+        prop_meshes: &[(0, PropMeshType::Leaf), (1, PropMeshType::Sphere)],
     },
 ];
