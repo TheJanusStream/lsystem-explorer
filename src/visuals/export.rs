@@ -394,7 +394,10 @@ fn perform_batch_export(params: &BatchExportParams, progress: &Arc<AtomicUsize>)
 
     for variant_idx in 0..params.variation_count {
         let mut sys = System::new();
-        let variant_seed = {
+        let variant_seed = if variant_idx == 0 {
+            // First variant uses the editor's exact seed for an identical result
+            params.seed
+        } else {
             use std::hash::{Hash, Hasher};
             let mut hasher = std::collections::hash_map::DefaultHasher::new();
             params.seed.hash(&mut hasher);
