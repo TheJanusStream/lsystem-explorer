@@ -10,8 +10,19 @@ use bevy::prelude::*;
 use bevy_egui::egui;
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
+use std::hash::{Hash, Hasher};
 use symbios::System;
 use symbios_genetics::{Genotype, Phenotype};
+
+/// Combines a base seed with additional discriminants into a statistically distinct u64.
+/// Uses DefaultHasher to avoid correlation artifacts from simple linear addition.
+fn mix_seed(base_seed: u64, generation: usize, index: usize) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    base_seed.hash(&mut hasher);
+    generation.hash(&mut hasher);
+    index.hash(&mut hasher);
+    hasher.finish()
+}
 
 /// Spacing between plants in the 3D grid (world units).
 pub const GRID_SPACING: f32 = 750.0;
@@ -163,7 +174,7 @@ impl NurseryState {
         base.tropism = config.tropism.map(|v| [v.x, v.y, v.z]);
 
         let pop_size = self.population_size();
-        let mut rng = Pcg64::seed_from_u64(self.seed);
+        let mut rng = Pcg64::seed_from_u64(mix_seed(self.seed, 0, 0));
         let mut new_population = Vec::with_capacity(pop_size);
 
         // First individual is the original
@@ -177,7 +188,7 @@ impl NurseryState {
         // Rest are mutated variants
         for i in 1..pop_size {
             let mut variant = base.clone();
-            variant.seed = self.seed + i as u64;
+            variant.seed = mix_seed(self.seed, 0, i);
             variant.mutate(&mut rng, self.mutation_rate);
             let fitness = evaluate_genotype(&variant);
             new_population.push(Phenotype {
@@ -206,7 +217,7 @@ impl NurseryState {
 
         if new_pop_size > old_pop_size {
             // Fill new slots with mutated variants of existing individuals
-            let mut rng = Pcg64::seed_from_u64(self.seed.wrapping_add(self.generation as u64));
+            let mut rng = Pcg64::seed_from_u64(mix_seed(self.seed, self.generation, 0));
             for i in old_pop_size..new_pop_size {
                 let source_idx = i % old_pop_size.max(1);
                 let source = self
@@ -215,7 +226,7 @@ impl NurseryState {
                     .map(|p| p.genotype.clone())
                     .unwrap_or_else(|| PlantGenotype::new("omega: F\nF -> F".to_string()));
                 let mut variant = source;
-                variant.seed = self.seed + i as u64;
+                variant.seed = mix_seed(self.seed, self.generation, i);
                 variant.mutate(&mut rng, self.mutation_rate);
                 let fitness = evaluate_genotype(&variant);
                 self.population.push(Phenotype {
@@ -241,7 +252,7 @@ impl NurseryState {
         }
 
         let pop_size = self.population_size();
-        let mut rng = Pcg64::seed_from_u64(self.seed.wrapping_add(self.generation as u64));
+        let mut rng = Pcg64::seed_from_u64(mix_seed(self.seed, self.generation, 0));
 
         // Identify champions (selected individuals)
         let champions: Vec<usize> = self.selected.iter().copied().collect();
@@ -252,7 +263,7 @@ impl NurseryState {
             // Fallback: mutate all individuals randomly
             for (i, phenotype) in self.population.iter().enumerate() {
                 let mut offspring = phenotype.genotype.clone();
-                offspring.seed = self.seed.wrapping_add(self.generation as u64) + i as u64;
+                offspring.seed = mix_seed(self.seed, self.generation, i);
                 offspring.mutate(&mut rng, self.mutation_rate);
                 let fitness = evaluate_genotype(&offspring);
                 new_population.push(Phenotype {
@@ -284,8 +295,7 @@ impl NurseryState {
                 let mut offspring = parent_a.crossover(parent_b, &mut rng);
 
                 // Mutation
-                offspring.seed =
-                    self.seed.wrapping_add(self.generation as u64) + (champions.len() + i) as u64;
+                offspring.seed = mix_seed(self.seed, self.generation, champions.len() + i);
                 offspring.mutate(&mut rng, self.mutation_rate);
 
                 let fitness = evaluate_genotype(&offspring);
@@ -317,7 +327,7 @@ impl NurseryState {
         // Increment generation first to guarantee fresh RNG seed
         self.generation += 1;
 
-        let mut rng = Pcg64::seed_from_u64(self.seed.wrapping_add(self.generation as u64));
+        let mut rng = Pcg64::seed_from_u64(mix_seed(self.seed, self.generation, 0));
 
         for (i, phenotype) in self.population.iter_mut().enumerate() {
             // Skip selected champions
@@ -356,8 +366,7 @@ impl NurseryState {
             if let Some(phenotype) = self.population.get_mut(idx) {
                 let mut variant = genotype.clone();
                 // Give each variant a unique seed based on its position
-                variant.seed =
-                    self.seed.wrapping_add(self.generation as u64) + idx as u64 + i as u64;
+                variant.seed = mix_seed(self.seed, self.generation, idx + i);
                 phenotype.fitness = evaluate_genotype(&variant);
                 phenotype.genotype = variant;
             }

@@ -7,6 +7,8 @@ use lsystem_explorer::core::config::{
     LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig,
 };
 use lsystem_explorer::ui::nursery::{NurseryState, PopulationMeshCache};
+use lsystem_explorer::visuals::export::ExportStatus;
+use lsystem_explorer::visuals::nursery_render::NurseryDerivationTask;
 use lsystem_explorer::visuals::turtle::{PropMaterialCache, TurtleRenderState};
 use lsystem_explorer::{core, logic, ui, visuals};
 
@@ -36,10 +38,12 @@ fn main() {
         .init_resource::<PropConfig>()
         .init_resource::<MaterialSettingsMap>()
         .init_resource::<ExportConfig>()
+        .init_resource::<ExportStatus>()
         .init_resource::<TurtleRenderState>()
         .init_resource::<PropMaterialCache>()
         .init_resource::<NurseryState>()
         .init_resource::<PopulationMeshCache>()
+        .init_resource::<NurseryDerivationTask>()
         // Startup
         .add_systems(
             Startup,
@@ -64,12 +68,14 @@ fn main() {
                 visuals::turtle::render_turtle,
                 visuals::turtle::toggle_editor_visibility,
                 visuals::nursery_render::rebuild_nursery_cache,
+                visuals::nursery_render::poll_nursery_derivation,
                 visuals::nursery_render::render_nursery_population,
                 visuals::nursery_render::sync_nursery_selection_visuals,
                 visuals::nursery_render::handle_panel_clicks,
                 bevy_symbios::materials::sync_material_properties,
                 visuals::turtle::sync_prop_materials,
                 visuals::export::batch_export_system,
+                visuals::export::poll_export_status,
             )
                 .chain(),
         )

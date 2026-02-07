@@ -2,6 +2,7 @@
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
 use lsystem_explorer::core::config::*;
+use lsystem_explorer::visuals::export::ExportStatus;
 use lsystem_explorer::visuals::turtle::{PropMaterialCache, TurtleRenderState};
 
 /// Creates a minimal headless Bevy app with necessary resources and plugins
@@ -30,6 +31,7 @@ pub fn setup_headless_app() -> App {
         .init_resource::<PropConfig>()
         .init_resource::<MaterialSettingsMap>()
         .init_resource::<ExportConfig>()
+        .init_resource::<ExportStatus>()
         .init_resource::<TurtleRenderState>()
         .init_resource::<PropMaterialCache>();
 

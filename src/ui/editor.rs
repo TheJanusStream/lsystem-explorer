@@ -6,6 +6,7 @@ use crate::core::genotype::PlantGenotype;
 use crate::core::presets::PRESETS;
 use crate::ui::editor_utils::{highlight_lsystem, smart_slider_range, update_define_in_source};
 use crate::ui::nursery::{NurseryMode, NurseryState, nursery_ui};
+use crate::visuals::export::ExportStatus;
 use crate::visuals::turtle::TurtleRenderState;
 use bevy::prelude::*;
 use bevy_egui::{EguiContexts, egui};
@@ -18,6 +19,7 @@ pub fn ui_system(
     mut prop_config: ResMut<PropConfig>,
     mut material_settings: ResMut<MaterialSettingsMap>,
     mut export_config: ResMut<ExportConfig>,
+    export_status: Res<ExportStatus>,
     mut debounce: ResMut<DerivationDebounce>,
     mut dirty: ResMut<DirtyFlags>,
     status: Res<DerivationStatus>,
@@ -461,11 +463,39 @@ pub fn ui_system(
                                 });
                         });
 
-                        if ui
-                            .button(format!("Export {} Files", export_config.format.name()))
-                            .clicked()
-                        {
-                            export_config.export_requested = true;
+                        if export_status.exporting {
+                            // Show progress bar while exporting
+                            let completed = export_status
+                                .progress
+                                .as_ref()
+                                .map(|p| p.load(std::sync::atomic::Ordering::Relaxed))
+                                .unwrap_or(0);
+                            let total = export_status.total.max(1);
+                            let fraction = completed as f32 / total as f32;
+
+                            ui.add(
+                                egui::ProgressBar::new(fraction)
+                                    .text(format!("Exporting {}/{}...", completed, total)),
+                            );
+                        } else {
+                            if ui
+                                .button(format!("Export {} Files", export_config.format.name()))
+                                .clicked()
+                            {
+                                export_config.export_requested = true;
+                            }
+
+                            if let Some(err) = &export_status.error {
+                                ui.colored_label(
+                                    egui::Color32::RED,
+                                    format!("Export failed: {}", err),
+                                );
+                            } else if export_status.last_export_count > 0 {
+                                ui.colored_label(
+                                    egui::Color32::GREEN,
+                                    format!("Exported {} files", export_status.last_export_count),
+                                );
+                            }
                         }
 
                         #[cfg(not(target_arch = "wasm32"))]

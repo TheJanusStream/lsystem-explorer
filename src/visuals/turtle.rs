@@ -116,8 +116,7 @@ pub fn render_turtle(
 
     let sys = &engine.0;
 
-    // 1. Cleanup (including prop material cache)
-    prop_material_cache.cache.clear();
+    // 1. Cleanup (retain prop material cache across rebuilds to avoid asset churn)
     for entity in &old_meshes {
         commands.entity(entity).despawn();
     }
@@ -247,7 +246,7 @@ pub fn sync_prop_materials(
         return;
     }
 
-    // Clear cache and regenerate all prop materials
+    // Clear cache on palette change so materials are regenerated with updated colors
     prop_material_cache.cache.clear();
 
     for (tint, mut mat_handle) in &mut props {

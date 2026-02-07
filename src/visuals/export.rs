@@ -1,14 +1,18 @@
 use bevy::mesh::{Indices, VertexAttributeValues};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
+use bevy::tasks::AsyncComputeTaskPool;
 
 use crate::core::config::{
-    ExportConfig, ExportFormat, LSystemConfig, MaterialSettingsMap, PropConfig,
+    ExportConfig, ExportFormat, LSystemConfig, MaterialSettingsMap, PropConfig, PropMeshType,
 };
 use crate::visuals::assets::PropMeshAssets;
 
 use bevy_symbios::LSystemMeshBuilder;
 use bevy_symbios::export::{mesh_to_obj, meshes_to_glb};
+use bevy_symbios::materials::MaterialSettings;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use symbios::System;
 use symbios_turtle_3d::{SkeletonProp, TurtleConfig, TurtleInterpreter};
 
@@ -17,11 +21,11 @@ use symbios_turtle_3d::{SkeletonProp, TurtleConfig, TurtleInterpreter};
 // ---------------------------------------------------------------------------
 
 #[cfg(target_arch = "wasm32")]
-pub fn save_file(filename: &str, content: &str) {
+pub fn save_file(filename: &str, content: &str) -> Result<(), String> {
     use wasm_bindgen::JsCast;
 
-    let window = web_sys::window().expect("no window");
-    let document = window.document().expect("no document");
+    let window = web_sys::window().ok_or("No browser window available")?;
+    let document = window.document().ok_or("No document available")?;
 
     let blob_parts = js_sys::Array::new();
     blob_parts.push(&wasm_bindgen::JsValue::from_str(content));
@@ -30,44 +34,48 @@ pub fn save_file(filename: &str, content: &str) {
     options.type_("text/plain");
 
     let blob = web_sys::Blob::new_with_str_sequence_and_options(&blob_parts, &options)
-        .expect("failed to create blob");
+        .map_err(|e| format!("Failed to create blob: {:?}", e))?;
 
-    let url = web_sys::Url::create_object_url_with_blob(&blob).expect("failed to create URL");
+    let url = web_sys::Url::create_object_url_with_blob(&blob)
+        .map_err(|e| format!("Failed to create URL: {:?}", e))?;
 
     let anchor: web_sys::HtmlAnchorElement = document
         .create_element("a")
-        .expect("failed to create anchor")
+        .map_err(|e| format!("Failed to create anchor: {:?}", e))?
         .dyn_into()
-        .expect("not an anchor");
+        .map_err(|_| "Element is not an anchor".to_string())?;
 
     anchor.set_href(&url);
     anchor.set_download(filename);
     anchor.click();
 
-    web_sys::Url::revoke_object_url(&url).expect("failed to revoke URL");
+    let _ = web_sys::Url::revoke_object_url(&url);
+    Ok(())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn save_file(filename: &str, content: &str) {
+pub fn save_file(filename: &str, content: &str) -> Result<(), String> {
     use std::fs;
     use std::path::Path;
 
     let export_dir = Path::new("exports");
     if !export_dir.exists() {
-        fs::create_dir_all(export_dir).expect("failed to create exports directory");
+        fs::create_dir_all(export_dir)
+            .map_err(|e| format!("Failed to create exports directory: {}", e))?;
     }
 
     let path = export_dir.join(filename);
-    fs::write(&path, content).expect("failed to write file");
+    fs::write(&path, content).map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
     info!("Exported: {}", path.display());
+    Ok(())
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn save_file_binary(filename: &str, content: &[u8]) {
+pub fn save_file_binary(filename: &str, content: &[u8]) -> Result<(), String> {
     use wasm_bindgen::JsCast;
 
-    let window = web_sys::window().expect("no window");
-    let document = window.document().expect("no document");
+    let window = web_sys::window().ok_or("No browser window available")?;
+    let document = window.document().ok_or("No document available")?;
 
     let uint8arr = js_sys::Uint8Array::new_with_length(content.len() as u32);
     uint8arr.copy_from(content);
@@ -79,36 +87,63 @@ pub fn save_file_binary(filename: &str, content: &[u8]) {
     options.type_("application/octet-stream");
 
     let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)
-        .expect("failed to create blob");
+        .map_err(|e| format!("Failed to create blob: {:?}", e))?;
 
-    let url = web_sys::Url::create_object_url_with_blob(&blob).expect("failed to create URL");
+    let url = web_sys::Url::create_object_url_with_blob(&blob)
+        .map_err(|e| format!("Failed to create URL: {:?}", e))?;
 
     let anchor: web_sys::HtmlAnchorElement = document
         .create_element("a")
-        .expect("failed to create anchor")
+        .map_err(|e| format!("Failed to create anchor: {:?}", e))?
         .dyn_into()
-        .expect("not an anchor");
+        .map_err(|_| "Element is not an anchor".to_string())?;
 
     anchor.set_href(&url);
     anchor.set_download(filename);
     anchor.click();
 
-    web_sys::Url::revoke_object_url(&url).expect("failed to revoke URL");
+    let _ = web_sys::Url::revoke_object_url(&url);
+    Ok(())
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn save_file_binary(filename: &str, content: &[u8]) {
+pub fn save_file_binary(filename: &str, content: &[u8]) -> Result<(), String> {
     use std::fs;
     use std::path::Path;
 
     let export_dir = Path::new("exports");
     if !export_dir.exists() {
-        fs::create_dir_all(export_dir).expect("failed to create exports directory");
+        fs::create_dir_all(export_dir)
+            .map_err(|e| format!("Failed to create exports directory: {}", e))?;
     }
 
     let path = export_dir.join(filename);
-    fs::write(&path, content).expect("failed to write file");
+    fs::write(&path, content).map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
     info!("Exported: {}", path.display());
+    Ok(())
+}
+
+/// Tracks the result and progress of export operations for UI feedback.
+#[derive(Resource, Default)]
+pub struct ExportStatus {
+    /// None = no export attempted or success, Some = error message.
+    pub error: Option<String>,
+    /// Number of files successfully exported in the last batch.
+    pub last_export_count: usize,
+    /// Whether a background export is currently running.
+    pub exporting: bool,
+    /// Progress counter shared with background thread.
+    pub progress: Option<Arc<AtomicUsize>>,
+    /// Total number of variants being exported.
+    pub total: usize,
+    /// Shared result container for the background export task.
+    pending_result: Option<Arc<Mutex<Option<ExportResult>>>>,
+}
+
+/// Result from a background batch export.
+struct ExportResult {
+    count: usize,
+    error: Option<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -238,10 +273,32 @@ fn merge_prop_into_bucket(
 // Batch Export System
 // ---------------------------------------------------------------------------
 
-/// System that handles batch export when requested
+/// Captures all data needed for a batch export, cloned from ECS resources
+/// so the export can run on a background thread.
+struct BatchExportParams {
+    source_code: String,
+    iterations: usize,
+    seed: u64,
+    step_size: f32,
+    default_angle: f32,
+    default_width: f32,
+    tropism: Option<Vec3>,
+    elasticity: f32,
+    variation_count: usize,
+    base_filename: String,
+    format: ExportFormat,
+    material_settings: HashMap<u8, MaterialSettings>,
+    prop_meshes: HashMap<u16, PropMeshType>,
+    prop_scale: f32,
+    /// Pre-extracted prop mesh data (cloned from Assets<Mesh>), keyed by PropMeshType.
+    extracted_prop_meshes: HashMap<PropMeshType, Mesh>,
+}
+
+/// System that dispatches batch export to a background thread when requested.
 #[allow(clippy::too_many_arguments)]
 pub fn batch_export_system(
     mut export_config: ResMut<ExportConfig>,
+    mut export_status: ResMut<ExportStatus>,
     lsystem_config: Res<LSystemConfig>,
     material_settings: Res<MaterialSettingsMap>,
     prop_config: Res<PropConfig>,
@@ -253,20 +310,84 @@ pub fn batch_export_system(
     }
     export_config.export_requested = false;
 
+    if export_status.exporting {
+        return; // Already exporting
+    }
+
+    export_status.error = None;
+    export_status.last_export_count = 0;
+    export_status.exporting = true;
+    export_status.total = export_config.variation_count;
+
+    // Pre-extract prop mesh data from assets so the background thread has it
+    let mut extracted_prop_meshes = HashMap::new();
+    for (_, mesh_type) in prop_config.prop_meshes.iter() {
+        if !extracted_prop_meshes.contains_key(mesh_type)
+            && let Some(handle) = prop_assets.meshes.get(mesh_type)
+            && let Some(mesh) = mesh_assets.get(handle)
+        {
+            extracted_prop_meshes.insert(*mesh_type, mesh.clone());
+        }
+    }
+
+    let params = BatchExportParams {
+        source_code: lsystem_config.source_code.clone(),
+        iterations: lsystem_config.iterations,
+        seed: lsystem_config.seed,
+        step_size: lsystem_config.step_size,
+        default_angle: lsystem_config.default_angle,
+        default_width: lsystem_config.default_width,
+        tropism: lsystem_config.tropism,
+        elasticity: lsystem_config.elasticity,
+        variation_count: export_config.variation_count,
+        base_filename: export_config.base_filename.clone(),
+        format: export_config.format,
+        material_settings: material_settings.settings.clone(),
+        prop_meshes: prop_config.prop_meshes.clone(),
+        prop_scale: prop_config.prop_scale,
+        extracted_prop_meshes,
+    };
+
+    let progress = Arc::new(AtomicUsize::new(0));
+    let result: Arc<Mutex<Option<ExportResult>>> = Arc::new(Mutex::new(None));
+
+    export_status.progress = Some(progress.clone());
+    export_status.pending_result = Some(result.clone());
+
     info!(
-        "Starting batch export: {} variations as {}",
-        export_config.variation_count,
-        export_config.format.name()
+        "Starting async batch export: {} variations as {}",
+        params.variation_count,
+        params.format.name()
     );
 
-    for variant_idx in 0..export_config.variation_count {
-        let mut sys = System::new();
-        sys.set_seed(lsystem_config.seed.wrapping_add(variant_idx as u64));
+    let pool = AsyncComputeTaskPool::get();
+    pool.spawn(async move {
+        let export_result = perform_batch_export(&params, &progress);
+        if let Ok(mut guard) = result.lock() {
+            *guard = Some(export_result);
+        }
+    })
+    .detach();
+}
 
-        let source = &lsystem_config.source_code;
+/// Performs the full batch export on a background thread.
+fn perform_batch_export(params: &BatchExportParams, progress: &Arc<AtomicUsize>) -> ExportResult {
+    let mut count = 0usize;
+
+    for variant_idx in 0..params.variation_count {
+        let mut sys = System::new();
+        let variant_seed = {
+            use std::hash::{Hash, Hasher};
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            params.seed.hash(&mut hasher);
+            variant_idx.hash(&mut hasher);
+            hasher.finish()
+        };
+        sys.set_seed(variant_seed);
+
         let mut axiom_set = false;
 
-        for line in source.lines() {
+        for line in params.source_code.lines() {
             let trimmed = line.trim();
             if trimmed.is_empty() || trimmed.starts_with("//") {
                 continue;
@@ -289,12 +410,12 @@ pub fn batch_export_system(
         }
 
         if !axiom_set {
-            warn!("Export variant {}: No axiom found", variant_idx);
+            progress.fetch_add(1, Ordering::Relaxed);
             continue;
         }
 
-        if sys.derive(lsystem_config.iterations).is_err() {
-            warn!("Export variant {}: Derivation failed", variant_idx);
+        if sys.derive(params.iterations).is_err() {
+            progress.fetch_add(1, Ordering::Relaxed);
             continue;
         }
 
@@ -303,27 +424,27 @@ pub fn batch_export_system(
             .constants
             .get("step")
             .map(|&s| s as f32)
-            .unwrap_or(lsystem_config.step_size);
+            .unwrap_or(params.step_size);
 
         let default_angle = sys
             .constants
             .get("angle")
             .map(|&a| a as f32)
-            .unwrap_or(lsystem_config.default_angle)
+            .unwrap_or(params.default_angle)
             .to_radians();
 
         let initial_width = sys
             .constants
             .get("width")
             .map(|&w| w as f32)
-            .unwrap_or(lsystem_config.default_width);
+            .unwrap_or(params.default_width);
 
         let turtle_config = TurtleConfig {
             default_step,
             default_angle,
             initial_width,
-            tropism: lsystem_config.tropism,
-            elasticity: lsystem_config.elasticity,
+            tropism: params.tropism,
+            elasticity: params.elasticity,
             max_stack_depth: 1024,
         };
 
@@ -334,48 +455,41 @@ pub fn batch_export_system(
         let builder = LSystemMeshBuilder::new().with_resolution(8);
         let mut mesh_buckets = builder.build(&skeleton);
 
-        // Merge props into the mesh buckets
+        // Merge props using pre-extracted mesh data
         for prop in &skeleton.props {
-            let mesh_type = prop_config
+            let mesh_type = params
                 .prop_meshes
                 .get(&prop.prop_id)
                 .copied()
                 .unwrap_or_default();
 
-            if let Some(mesh_handle) = prop_assets.meshes.get(&mesh_type)
-                && let Some(source_mesh) = mesh_assets.get(mesh_handle)
-            {
-                merge_prop_into_bucket(
-                    &mut mesh_buckets,
-                    source_mesh,
-                    prop,
-                    prop_config.prop_scale,
-                );
+            if let Some(source_mesh) = params.extracted_prop_meshes.get(&mesh_type) {
+                merge_prop_into_bucket(&mut mesh_buckets, source_mesh, prop, params.prop_scale);
             }
         }
 
         let filename = format!(
             "{}_{:02}.{}",
-            export_config.base_filename,
+            params.base_filename,
             variant_idx + 1,
-            export_config.format.extension()
+            params.format.extension()
         );
 
-        match export_config.format {
+        let save_result = match params.format {
             ExportFormat::Obj => {
                 let mut combined_obj = String::new();
                 combined_obj.push_str("# Exported from L-System Explorer\n");
                 combined_obj.push_str(&format!(
                     "# Variant {} of {}\n\n",
                     variant_idx + 1,
-                    export_config.variation_count
+                    params.variation_count
                 ));
 
                 let mut vertex_offset = 0u32;
                 for (material_id, mesh) in &mesh_buckets {
                     let object_name = format!(
                         "{}_{:02}_mat{}",
-                        export_config.base_filename,
+                        params.base_filename,
                         variant_idx + 1,
                         material_id
                     );
@@ -383,14 +497,63 @@ pub fn batch_export_system(
                     vertex_offset += mesh.count_vertices() as u32;
                 }
 
-                save_file(&filename, &combined_obj);
+                save_file(&filename, &combined_obj)
             }
             ExportFormat::Glb => {
-                let glb_data = meshes_to_glb(&mesh_buckets, &material_settings.settings);
-                save_file_binary(&filename, &glb_data);
+                let glb_data = meshes_to_glb(&mesh_buckets, &params.material_settings);
+                save_file_binary(&filename, &glb_data)
+            }
+        };
+
+        match save_result {
+            Ok(()) => {
+                count += 1;
+            }
+            Err(e) => {
+                progress.fetch_add(1, Ordering::Relaxed);
+                return ExportResult {
+                    count,
+                    error: Some(e),
+                };
             }
         }
+
+        progress.fetch_add(1, Ordering::Relaxed);
     }
 
-    info!("Batch export complete!");
+    ExportResult { count, error: None }
+}
+
+/// System that polls for completed background export tasks.
+pub fn poll_export_status(mut export_status: ResMut<ExportStatus>) {
+    if !export_status.exporting {
+        return;
+    }
+
+    let Some(result_arc) = &export_status.pending_result else {
+        return;
+    };
+
+    let Ok(mut guard) = result_arc.lock() else {
+        return;
+    };
+
+    let Some(result) = guard.take() else {
+        return; // Not done yet
+    };
+
+    drop(guard);
+
+    export_status.last_export_count = result.count;
+    export_status.error = result.error;
+    export_status.exporting = false;
+    export_status.pending_result = None;
+    export_status.progress = None;
+
+    if export_status.error.is_none() {
+        info!(
+            "Batch export complete: {} files",
+            export_status.last_export_count
+        );
+    }
 }

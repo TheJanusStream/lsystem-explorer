@@ -13,8 +13,10 @@ use crate::visuals::assets::PropMeshAssets;
 use bevy::math::{Affine2, Vec2};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
+use bevy::tasks::AsyncComputeTaskPool;
 use bevy_symbios::LSystemMeshBuilder;
 use bevy_symbios::materials::ProceduralTextures;
+use std::sync::{Arc, Mutex};
 use symbios::System;
 use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
 
@@ -134,7 +136,7 @@ fn create_genotype_materials(
 /// NOTE: Always creates a fresh `System::new()` to guarantee clean derivation state.
 /// This prevents cumulative derivation issues where calling `sys.derive(n)` on an
 /// already-derived system would result in double-growth.
-fn derive_genotype(genotype: &PlantGenotype, _config: &LSystemConfig) -> Option<System> {
+fn derive_genotype(genotype: &PlantGenotype) -> Option<System> {
     let mut sys = System::new();
     sys.set_seed(genotype.seed);
 
@@ -192,14 +194,32 @@ fn derive_genotype(genotype: &PlantGenotype, _config: &LSystemConfig) -> Option<
     Some(sys)
 }
 
-/// System that rebuilds the nursery population mesh cache when needed.
-#[allow(clippy::too_many_arguments)]
+/// Result from a single async genotype derivation.
+struct GenotypeDerivedResult {
+    index: usize,
+    system: Option<System>,
+    fitness: f32,
+    genotype: PlantGenotype,
+    error: Option<String>,
+}
+
+/// Tracks pending async nursery derivation tasks.
+#[derive(Resource, Default)]
+pub struct NurseryDerivationTask {
+    /// Shared container for results from all background derivation tasks.
+    pending: Option<Arc<Mutex<Vec<GenotypeDerivedResult>>>>,
+    /// Total number of derivations dispatched (to know when all are done).
+    expected_count: usize,
+    /// Generation number this task corresponds to.
+    generation: usize,
+}
+
+/// System that dispatches nursery derivations to the async thread pool.
 pub fn rebuild_nursery_cache(
     mut nursery: ResMut<NurseryState>,
     mut cache: ResMut<PopulationMeshCache>,
-    config: Res<LSystemConfig>,
+    mut task: ResMut<NurseryDerivationTask>,
 ) {
-    // Only rebuild when explicitly requested and nursery is enabled
     if !nursery.needs_3d_rebuild || nursery.mode != NurseryMode::Enabled {
         return;
     }
@@ -208,49 +228,101 @@ pub fn rebuild_nursery_cache(
     cache.entries.clear();
     nursery.errors.clear();
 
-    // Get population data directly from NurseryState
     if nursery.population.is_empty() {
         return;
     }
 
-    let population: Vec<(PlantGenotype, f32)> = nursery
+    let population: Vec<(usize, PlantGenotype, f32)> = nursery
         .population
         .iter()
-        .map(|p| (p.genotype.clone(), p.fitness))
+        .enumerate()
+        .map(|(i, p)| (i, p.genotype.clone(), p.fitness))
         .collect();
 
-    // Derive each genotype, capturing errors
-    for (i, (genotype, fitness)) in population.into_iter().enumerate() {
-        let (system, error) = match derive_genotype(&genotype, &config) {
-            Some(sys) => (Some(sys), None),
-            None => (
-                None,
-                Some("Derivation failed: invalid L-system syntax".to_string()),
-            ),
-        };
+    let results: Arc<Mutex<Vec<GenotypeDerivedResult>>> = Arc::new(Mutex::new(Vec::new()));
+    let pool = AsyncComputeTaskPool::get();
 
-        // Store error in NurseryState for UI access
-        if let Some(ref err) = error {
-            nursery.errors.insert(i, err.clone());
+    task.expected_count = population.len();
+    task.generation = nursery.generation;
+
+    for (index, genotype, fitness) in population {
+        let results = results.clone();
+        pool.spawn(async move {
+            let (system, error) = match derive_genotype(&genotype) {
+                Some(sys) => (Some(sys), None),
+                None => (
+                    None,
+                    Some("Derivation failed: invalid L-system syntax".to_string()),
+                ),
+            };
+
+            if let Ok(mut guard) = results.lock() {
+                guard.push(GenotypeDerivedResult {
+                    index,
+                    system,
+                    fitness,
+                    genotype,
+                    error,
+                });
+            }
+        })
+        .detach();
+    }
+
+    task.pending = Some(results);
+}
+
+/// System that polls for completed async nursery derivations and updates the cache.
+pub fn poll_nursery_derivation(
+    mut nursery: ResMut<NurseryState>,
+    mut cache: ResMut<PopulationMeshCache>,
+    mut task: ResMut<NurseryDerivationTask>,
+) {
+    let Some(results) = &task.pending else {
+        return;
+    };
+
+    let Ok(guard) = results.lock() else {
+        return;
+    };
+
+    if guard.len() < task.expected_count {
+        return; // Not all derivations complete yet
+    }
+
+    // All derivations complete — consume results
+    drop(guard);
+    let results_arc = task.pending.take().unwrap();
+    let completed: Vec<GenotypeDerivedResult> = match Arc::try_unwrap(results_arc) {
+        Ok(mutex) => mutex.into_inner().unwrap_or_default(),
+        Err(arc) => {
+            let mut guard = arc.lock().unwrap();
+            std::mem::take(&mut *guard)
+        }
+    };
+
+    for result in completed {
+        if let Some(ref err) = result.error {
+            nursery.errors.insert(result.index, err.clone());
         }
 
         cache.entries.insert(
-            i,
+            result.index,
             CachedGenotypeMesh {
-                system,
-                fitness,
-                angle: genotype.angle,
-                step: genotype.step,
-                width: genotype.width,
-                elasticity: genotype.elasticity,
-                tropism: genotype.tropism.map(|t| Vec3::new(t[0], t[1], t[2])),
-                materials: genotype.get_material_settings(),
-                error,
+                system: result.system,
+                fitness: result.fitness,
+                angle: result.genotype.angle,
+                step: result.genotype.step,
+                width: result.genotype.width,
+                elasticity: result.genotype.elasticity,
+                tropism: result.genotype.tropism.map(|t| Vec3::new(t[0], t[1], t[2])),
+                materials: result.genotype.get_material_settings(),
+                error: result.error,
             },
         );
     }
 
-    cache.cached_generation = nursery.generation;
+    cache.cached_generation = task.generation;
     cache.dirty = true;
 }
 

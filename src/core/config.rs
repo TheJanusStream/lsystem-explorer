@@ -266,34 +266,64 @@ pub struct DerivationTask {
 
 /// Scans source code for material ID usage patterns: `,(N)` where N is a number.
 /// Returns the maximum material ID found, or 0 if none.
+/// Respects L-system comment syntax (`//`): content after `//` on a line is ignored.
 pub fn scan_max_material_id(source: &str) -> u8 {
     let mut max_id: u8 = 0;
-    let bytes = source.as_bytes();
-    let mut i = 0;
 
-    while i < bytes.len() {
-        // Look for `,` followed by `(`
-        if bytes[i] == b',' && i + 1 < bytes.len() && bytes[i + 1] == b'(' {
-            i += 2; // Skip `,(`
+    for line in source.lines() {
+        // Strip comments: only scan content before `//`
+        let active = match line.find("//") {
+            Some(pos) => &line[..pos],
+            None => line,
+        };
 
-            // Parse the number
-            let start = i;
-            while i < bytes.len() && bytes[i].is_ascii_digit() {
+        let bytes = active.as_bytes();
+        let mut i = 0;
+
+        while i < bytes.len() {
+            if bytes[i] == b',' && i + 1 < bytes.len() && bytes[i + 1] == b'(' {
+                i += 2; // Skip `,(`
+
+                let start = i;
+                while i < bytes.len() && bytes[i].is_ascii_digit() {
+                    i += 1;
+                }
+
+                if let Some(num) = std::str::from_utf8(&bytes[start..i])
+                    .ok()
+                    .and_then(|s| s.parse::<u8>().ok())
+                {
+                    max_id = max_id.max(num);
+                }
+            } else {
                 i += 1;
             }
-
-            if let Some(num) = std::str::from_utf8(&bytes[start..i])
-                .ok()
-                .and_then(|s| s.parse::<u8>().ok())
-            {
-                max_id = max_id.max(num);
-            }
-        } else {
-            i += 1;
         }
     }
 
     max_id
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_scan_max_material_id_basic() {
+        assert_eq!(scan_max_material_id("F,(1) F,(2)"), 2);
+        assert_eq!(scan_max_material_id("F,(0)"), 0);
+        assert_eq!(scan_max_material_id("F + F"), 0);
+    }
+
+    #[test]
+    fn test_scan_max_material_id_ignores_comments() {
+        // Material ID in a comment should be ignored
+        assert_eq!(scan_max_material_id("F,(1) // ,(9) high ID in comment"), 1);
+        // Entire comment line
+        assert_eq!(scan_max_material_id("// ,(5)\nF,(2)"), 2);
+        // No active material IDs
+        assert_eq!(scan_max_material_id("// ,(3)"), 0);
+    }
 }
 
 /// Configuration for batch export
