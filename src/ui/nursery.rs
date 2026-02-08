@@ -394,14 +394,20 @@ fn evaluate_genotype(genotype: &PlantGenotype) -> f32 {
 }
 
 /// Renders the nursery UI panel.
-/// Returns `true` if nursery mode is currently enabled.
+///
+/// Takes immutable references to `config`, `materials`, and `prop_config` to avoid
+/// triggering Bevy's `DerefMut` change detection on every frame. Returns
+/// `Some(PlantGenotype)` when the user clicks "load into editor", so the caller
+/// can apply the mutations only when needed.
 pub fn nursery_ui(
     ui: &mut egui::Ui,
     nursery: &mut NurseryState,
-    config: &mut LSystemConfig,
-    materials: &mut MaterialSettingsMap,
-    prop_config: &mut PropConfig,
-) {
+    config: &LSystemConfig,
+    materials: &MaterialSettingsMap,
+    prop_config: &PropConfig,
+) -> Option<PlantGenotype> {
+    let mut load_action = None;
+
     if nursery.mode == NurseryMode::Enabled {
         ui.horizontal(|ui| {
             ui.label(format!("Generation: {}", nursery.generation));
@@ -591,26 +597,9 @@ pub fn nursery_ui(
                         // Handle clicks
                         if response.clicked() {
                             if load_hovered {
-                                // Load into editor
+                                // Return genotype for caller to apply
                                 if let Some(genotype) = nursery.get_genotype(*i) {
-                                    let new_materials = genotype.get_material_settings();
-                                    config.source_code = genotype.source_code;
-                                    config.finalization_code = genotype.finalization_code;
-                                    config.iterations = genotype.iterations;
-                                    config.default_angle = genotype.angle;
-                                    config.step_size = genotype.step;
-                                    config.default_width = genotype.width;
-                                    config.elasticity = genotype.elasticity;
-                                    config.tropism =
-                                        genotype.tropism.map(|t| Vec3::new(t[0], t[1], t[2]));
-                                    config.seed = genotype.seed;
-                                    config.recompile_requested = true;
-                                    materials.settings.clear();
-                                    for (slot, mat) in new_materials {
-                                        materials.settings.insert(slot, mat);
-                                    }
-                                    // Restore prop configuration from genotype
-                                    prop_config.prop_meshes = genotype.prop_mappings;
+                                    load_action = Some(genotype);
                                     nursery.mode = NurseryMode::Disabled;
                                 }
                             } else {
@@ -648,4 +637,6 @@ pub fn nursery_ui(
             }
         });
     }
+
+    load_action
 }

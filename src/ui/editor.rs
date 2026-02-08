@@ -554,13 +554,29 @@ pub fn ui_system(
                 }
                 // End of more editor-only sections
 
-                nursery_ui(
-                    ui,
-                    &mut nursery,
-                    &mut config,
-                    &mut material_settings,
-                    &mut prop_config,
-                );
+                // Pass immutable refs to avoid triggering DerefMut change
+                // detection on ResMut<MaterialSettingsMap> every frame.
+                // Mutations are applied only when the user loads a genotype.
+                if let Some(genotype) =
+                    nursery_ui(ui, &mut nursery, &config, &material_settings, &prop_config)
+                {
+                    let new_materials = genotype.get_material_settings();
+                    config.source_code = genotype.source_code;
+                    config.finalization_code = genotype.finalization_code;
+                    config.iterations = genotype.iterations;
+                    config.default_angle = genotype.angle;
+                    config.step_size = genotype.step;
+                    config.default_width = genotype.width;
+                    config.elasticity = genotype.elasticity;
+                    config.tropism = genotype.tropism.map(|t| Vec3::new(t[0], t[1], t[2]));
+                    config.seed = genotype.seed;
+                    config.recompile_requested = true;
+                    material_settings.settings.clear();
+                    for (slot, mat) in new_materials {
+                        material_settings.settings.insert(slot, mat);
+                    }
+                    prop_config.prop_meshes = genotype.prop_mappings;
+                }
             });
     }
 }

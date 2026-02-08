@@ -90,6 +90,8 @@ pub fn poll_derivation(
 
 /// Ensures the MaterialSettingsMap has slots for all material IDs up to max_material_id.
 /// Adds default entries for any missing slots.
+/// Only takes `ResMut` when entries are actually missing, to avoid triggering
+/// Bevy's change detection unnecessarily.
 pub fn ensure_material_palette_size(
     analysis: Res<LSystemAnalysis>,
     mut material_settings: ResMut<MaterialSettingsMap>,
@@ -98,8 +100,16 @@ pub fn ensure_material_palette_size(
         return;
     }
 
-    for id in 0..=analysis.max_material_id {
-        material_settings.settings.entry(id).or_default();
+    // Check if any slots are missing before taking mutable access,
+    // to avoid triggering DerefMut (and thus change detection) when
+    // the map already has all needed entries.
+    let needs_insert =
+        (0..=analysis.max_material_id).any(|id| !material_settings.settings.contains_key(&id));
+
+    if needs_insert {
+        for id in 0..=analysis.max_material_id {
+            material_settings.settings.entry(id).or_default();
+        }
     }
 }
 
