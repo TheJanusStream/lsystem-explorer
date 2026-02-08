@@ -204,106 +204,7 @@ impl PlantGenotype {
     ///
     /// Returns None if parsing fails.
     pub fn parse(&self) -> Option<System> {
-        let mut system = System::new();
-
-        // Parse line by line to handle axiom and rules
-        for line in self.source_code.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with("//") {
-                continue;
-            }
-
-            if trimmed.starts_with("omega:") {
-                // Extract axiom
-                let axiom = trimmed.strip_prefix("omega:")?.trim();
-                system.set_axiom(axiom).ok()?;
-            } else if trimmed.starts_with('#') {
-                // Handle #define directives
-                if let Some(rest) = trimmed.strip_prefix("#define") {
-                    let parts: Vec<&str> = rest.trim().splitn(2, char::is_whitespace).collect();
-                    if parts.len() == 2
-                        && let Ok(val) = parts[1].trim().parse::<f64>()
-                    {
-                        system.constants.insert(parts[0].to_string(), val);
-                    }
-                }
-            } else if trimmed.contains("->") {
-                // This is a rule
-                system.add_rule(trimmed).ok()?;
-            }
-        }
-
-        Some(system)
-    }
-
-    /// Reconstructs source code from a mutated System.
-    ///
-    /// This is the key round-trip operation: after mutating a System,
-    /// we export its rules back to source code to maintain the source
-    /// as the single source of truth.
-    ///
-    /// Output order: comments/directives → #define lines → omega line → rules
-    fn reconstruct_source(system: &System, original_source: &str) -> String {
-        // Export all rules from the system
-        let exported_rules = system.export_rules();
-
-        // Extract non-rule lines from original source, EXCLUDING #define directives
-        // (we'll regenerate those from system.constants to preserve mutations)
-        // Separate the omega line from other preamble lines
-        let mut preamble_lines = Vec::new();
-        let mut omega_line: Option<String> = None;
-        let mut seen_rules = false;
-
-        for line in original_source.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with("//") {
-                // Keep comments and blank lines until we hit rules
-                if !seen_rules {
-                    preamble_lines.push(line.to_string());
-                }
-            } else if trimmed.starts_with("omega:") {
-                // Store omega line separately to place after #define directives
-                omega_line = Some(line.to_string());
-            } else if trimmed.starts_with("#define") {
-                // Skip old #define directives - we'll regenerate from system.constants
-            } else if trimmed.starts_with('#') {
-                // Keep other directives (#ignore, etc.)
-                preamble_lines.push(line.to_string());
-            } else if trimmed.contains("->") {
-                // This is a rule line
-                seen_rules = true;
-            } else if !seen_rules {
-                // Keep other preamble lines
-                preamble_lines.push(line.to_string());
-            }
-        }
-
-        // Build new source: preamble first (comments, directives like #ignore)
-        let mut result = preamble_lines.join("\n");
-        if !result.is_empty() && !result.ends_with('\n') {
-            result.push('\n');
-        }
-
-        // Append #define directives from system.constants (mutated values)
-        let mut constants: Vec<_> = system.constants.iter().collect();
-        constants.sort_by_key(|(k, _)| *k);
-        for (name, value) in constants {
-            result.push_str(&format!("#define {} {}\n", name, value));
-        }
-
-        // Add omega line after #define directives so constants are defined
-        if let Some(omega) = omega_line {
-            result.push_str(&omega);
-            result.push('\n');
-        }
-
-        // Add exported rules
-        for (_, rule_source) in exported_rules {
-            result.push_str(&rule_source);
-            result.push('\n');
-        }
-
-        result.trim_end().to_string()
+        System::from_source(&self.source_code).ok()
     }
 
     /// Mutates the material colors slightly.
@@ -405,32 +306,14 @@ impl Genotype for PlantGenotype {
         }
 
         // Reconstruct source from mutated system
-        self.source_code = Self::reconstruct_source(&system, &self.source_code);
+        self.source_code = system.to_source();
 
         // Mutate finalization code if present
-        if !self.finalization_code.trim().is_empty() {
-            let mut fin_system = System::new();
-            let mut fin_valid = true;
-            for line in self.finalization_code.lines() {
-                let trimmed = line.trim();
-                if trimmed.is_empty() || trimmed.starts_with("//") {
-                    continue;
-                }
-                if trimmed.starts_with('#') {
-                    if fin_system.add_directive(trimmed).is_err() {
-                        fin_valid = false;
-                        break;
-                    }
-                } else if trimmed.contains("->") && fin_system.add_rule(trimmed).is_err() {
-                    fin_valid = false;
-                    break;
-                }
-            }
-            if fin_valid {
-                fin_system.mutate_with_rng(rng, &mutation_config);
-                self.finalization_code =
-                    Self::reconstruct_source(&fin_system, &self.finalization_code);
-            }
+        if !self.finalization_code.trim().is_empty()
+            && let Ok(mut fin_system) = System::from_source(&self.finalization_code)
+        {
+            fin_system.mutate_with_rng(rng, &mutation_config);
+            self.finalization_code = fin_system.to_source();
         }
 
         // Ensure materials map covers all material IDs referenced in source
@@ -507,7 +390,7 @@ impl Genotype for PlantGenotype {
         };
 
         // Reconstruct source from offspring
-        let source_code = Self::reconstruct_source(&offspring_system, &self.source_code);
+        let source_code = offspring_system.to_source();
 
         // Blend parameters
         let blend = rng.random::<f32>();
@@ -587,7 +470,7 @@ mod tests {
     }
 
     #[test]
-    fn test_reconstruct_source_preserves_mutated_constants() {
+    fn test_to_source_preserves_mutated_constants() {
         // Create a genotype with a #define directive
         let source = "#define angle 25.0\nomega: F\nF -> F [ + F ] F".to_string();
         let genotype = PlantGenotype::new(source);
@@ -596,8 +479,8 @@ mod tests {
         let mut system = genotype.parse().unwrap();
         system.constants.insert("angle".to_string(), 45.0);
 
-        // Reconstruct source from mutated system
-        let reconstructed = PlantGenotype::reconstruct_source(&system, &genotype.source_code);
+        // Reconstruct source via upstream to_source()
+        let reconstructed = system.to_source();
 
         // The reconstructed source should contain the mutated value
         assert!(
@@ -612,13 +495,13 @@ mod tests {
     }
 
     #[test]
-    fn test_reconstruct_source_places_define_before_omega() {
+    fn test_to_source_places_define_before_omega() {
         // Create a genotype with omega using a constant
         let source = "#define len 2.0\nomega: F(len)\nF(x) -> F(x) F(x)".to_string();
         let genotype = PlantGenotype::new(source);
 
         let system = genotype.parse().unwrap();
-        let reconstructed = PlantGenotype::reconstruct_source(&system, &genotype.source_code);
+        let reconstructed = system.to_source();
 
         // Find positions of #define and omega lines
         let define_pos = reconstructed.find("#define len");
