@@ -70,7 +70,8 @@ pub struct LSystemPreset {
 pub const PRESETS: &[LSystemPreset] = &[
     LSystemPreset {
         name: "Quadratic Koch Island (ABOP Fig 1.6)",
-        code: "omega: F(100)-F(100)-F(100)-F(100)\nF(s) -> F(s/3)+F(s/3)-F(s/3)-F(s/3)F(s/3)+F(s/3)+F(s/3)-F(s/3)",
+        code: "omega: F(100)-F(100)-F(100)-F(100)\n\
+               F(s) -> F(s/3)+F(s/3)-F(s/3)-F(s/3)F(s/3)+F(s/3)+F(s/3)-F(s/3)",
         iterations: 3,
         angle: 90.0,
         step: 10.0,
@@ -100,7 +101,13 @@ pub const PRESETS: &[LSystemPreset] = &[
     },
     LSystemPreset {
         name: "Sierpinski gasket (ABOP Fig 1.10 (b))",
-        code: "omega: Fr\nFl -> Fr+Fl+Fr\nFr -> Fl-Fr-Fl\n/// DECOMPOSITION ///\nFr -> F\nFl -> F",
+        code: "omega: Fr\n\
+               Fl -> Fr+Fl+Fr\n\
+               Fr -> Fl-Fr-Fl\n\
+               /// DECOMPOSITION ///\n\
+               Fr -> F\n\
+               /// DECOMPOSITION ///\n\
+               Fl -> F",
         iterations: 5,
         angle: 60.0,
         step: 10.0,
@@ -130,7 +137,9 @@ pub const PRESETS: &[LSystemPreset] = &[
     },
     LSystemPreset {
         name: "Branching pattern (ABOP Fig 1.39)",
-        code: "#define R 1.456\nomega: A(150)\nA(s) -> F(s)[+A(s/R)][-A(s/R)]",
+        code: "#define R 1.456\n\
+               omega: A(150)\n\
+               A(s) -> F(s)[+A(s/R)][-A(s/R)]",
         iterations: 12,
         angle: 85.0,
         step: 10.0,
@@ -160,7 +169,16 @@ pub const PRESETS: &[LSystemPreset] = &[
     },
     LSystemPreset {
         name: "Monopodial Tree (ABOP Fig 2.6)",
-        code: "#define r1 0.9\n#define r2 0.6\n#define a0 45\n#define a2 45\n#define d 137.5\n#define wr 0.707\nomega: A(100, 10)\np1: A(l, w) -> !(w) F(l) [ &(a0) B(l*r2, w*wr) ] / (d) A(l*r1, w*wr)\np2: B(l, w) -> !(w) F(l) [ -(a2) $ C(l*r2, w*wr) ] C(l*r1, w*wr)\np3: C(l, w) -> !(w) F(l) [ +(a2) $ B(l*r2, w*wr) ] B(l*r1, w*wr)",
+        code: "#define r1 0.9\n\
+               #define r2 0.6\n\
+               #define a0 45\n\
+               #define a2 45\n\
+               #define d 137.5\n\
+               #define wr 0.707\n\
+               omega: A(100, 10)\n\
+               p1: A(l, w) -> !(w) F(l) [ &(a0) B(l*r2, w*wr) ] / (d) A(l*r1, w*wr)\n\
+               p2: B(l, w) -> !(w) F(l) [ -(a2) $ C(l*r2, w*wr) ] C(l*r1, w*wr)\n\
+               p3: C(l, w) -> !(w) F(l) [ +(a2) $ B(l*r2, w*wr) ] B(l*r1, w*wr)",
         iterations: 8,
         angle: 45.0,
         step: 1.0,
@@ -190,7 +208,14 @@ pub const PRESETS: &[LSystemPreset] = &[
     },
     LSystemPreset {
         name: "Sympodial Tree (ABOP Fig 2.7)",
-        code: "#define r1 0.9\n#define r2 0.7\n#define a1 10\n#define a2 60\n#define wr 0.707\nomega: A(100, 10)\np1: A(l,w) -> !(w)F(l)[&(a1)B(l*r1,w*wr)] /(180)[&(a2)B(l*r2,w*wr)]\np2: B(l,w) -> !(w)F(l)[+(a1)$B(l*r1,w*wr)] [-(a2)$B(l*r2,w*wr)]",
+        code: "#define r1 0.9\n\
+               #define r2 0.7\n\
+               #define a1 10\n\
+               #define a2 60\n\
+               #define wr 0.707\n\
+               omega: A(100, 10)\n\
+               p1: A(l,w) -> !(w)F(l)[&(a1)B(l*r1,w*wr)] /(180)[&(a2)B(l*r2,w*wr)]\n\
+               p2: B(l,w) -> !(w)F(l)[+(a1)$B(l*r1,w*wr)] [-(a2)$B(l*r2,w*wr)]",
         iterations: 10,
         angle: 18.0,
         step: 1.0,
@@ -220,7 +245,16 @@ pub const PRESETS: &[LSystemPreset] = &[
     },
     LSystemPreset {
         name: "Ternary Tree (Gravity) (ABOP Fig 2.8)",
-        code: "#define d1 180\n#define d2 252\n#define a 36\n#define lr 1.07\n#define vr 1.732\nomega: !(1)F(200)/(45)A\np1: A : * -> !(vr)F(50)[&(a)F(50)A]/(d1)[&(a)F(50)A]/(d2)[&(a)F(50)A]\np2: F(l) : * -> F(l*lr)\np3: !(w) : * -> !(w*vr)",
+        code: "#define d1 180\n\
+               #define d2 252\n\
+               #define a 36\n\
+               #define lr 1.07\n\
+               #define vr 1.732\n\
+               #define s 50.0\n\
+               omega: !(1)F(4*s)/(45)A\n\
+               p1: A : * -> !(vr)F(s)[&(a)F(s)A]/(d1)[&(a)F(s)A]/(d2)[&(a)F(s)A]\n\
+               p2: F(l) : * -> F(l*lr)\n\
+               p3: !(w) : * -> !(w*vr)",
         iterations: 6,
         angle: 36.0,
         step: 1.0,
@@ -250,7 +284,23 @@ pub const PRESETS: &[LSystemPreset] = &[
     },
     LSystemPreset {
         name: "Ternary Tree (+Props +Materials +Variations)",
-        code: "#define d1 180\n#define th 2.5\n#define d2 252\n#define a 36\n#define lr 1.07\n#define vr 1.732\nomega: !(th)F(200)/(45)A,(1)~(0,60.0)\np0: A : 0.7 -> !(th*vr)F(50)[&(a)F(50)A,(1)~(0,60.0)]/(d1)[&(a)F(50)A,(1)~(0,60.0)]/(d2)[&(a)F(50)A,(1)~(0,60.0)]\np1: A : 0.3 -> !(th*vr)F(50)A\np2: F(l) : * -> F(l*lr)\np3: !(w) : * -> !(w*vr)\np4: ,(id) : id = 1 -> ,(2)\np5: ,(id) : id = 2 -> \np6: ~(id,sc) : id = 0 -> ~(1,sc)\np7: ~(id,sc) : id = 1 ->",
+        code: "#define d1 180\n\
+               #define th 2.5\n\
+               #define d2 252\n\
+               #define a 36\n\
+               #define lr 1.07\n\
+               #define vr 1.732\n\
+               #define ps 60.0\n\
+               #define s 50.0\n\
+               omega: !(th)F(4*s)/(45)A,(1)~(0,ps)\n\
+               p0: A : 0.7 -> !(th*vr)F(s)[&(a)F(s)A,(1)~(0,ps)]/(d1)[&(a)F(s)A,(1)~(0,ps)]/(d2)[&(a)F(s)A,(1)~(0,ps)]\n\
+               p1: A : 0.3 -> !(th*vr)F(s)A\n\
+               p2: F(l) : * -> F(l*lr)\n\
+               p3: !(w) : * -> !(w*vr)\n\
+               p4: ,(id) : id = 1 -> ,(2)\n\
+               p5: ,(id) : id = 2 -> \n\
+               p6: ~(id,sc) : id = 0 -> ~(1,sc)\n\
+               p7: ~(id,sc) : id = 1 ->",
         iterations: 6,
         angle: 36.0,
         step: 1.0,
