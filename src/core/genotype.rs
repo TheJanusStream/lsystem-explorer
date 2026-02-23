@@ -9,6 +9,9 @@
 
 use bevy::platform::collections::HashMap;
 use bevy_symbios::materials::{MaterialSettings, TextureType};
+use bevy_symbios_texture::bark::BarkConfig;
+use bevy_symbios_texture::leaf::LeafConfig;
+use bevy_symbios_texture::twig::TwigConfig;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use symbios::System;
@@ -28,6 +31,14 @@ pub struct SerializableMaterial {
     pub roughness: f32,
     pub metallic: f32,
     pub uv_scale: f32,
+    #[serde(default)]
+    pub texture_type: TextureType,
+    #[serde(default)]
+    pub leaf_config: LeafConfig,
+    #[serde(default)]
+    pub twig_config: TwigConfig,
+    #[serde(default)]
+    pub bark_config: BarkConfig,
 }
 
 impl Default for SerializableMaterial {
@@ -39,6 +50,10 @@ impl Default for SerializableMaterial {
             roughness: 0.5,
             metallic: 0.0,
             uv_scale: 1.0,
+            texture_type: TextureType::None,
+            leaf_config: LeafConfig::default(),
+            twig_config: TwigConfig::default(),
+            bark_config: BarkConfig::default(),
         }
     }
 }
@@ -52,12 +67,16 @@ impl From<&MaterialSettings> for SerializableMaterial {
             roughness: m.roughness,
             metallic: m.metallic,
             uv_scale: m.uv_scale,
+            texture_type: m.texture,
+            leaf_config: m.leaf_config.clone(),
+            twig_config: m.twig_config.clone(),
+            bark_config: m.bark_config.clone(),
         }
     }
 }
 
 impl SerializableMaterial {
-    /// Converts back to MaterialSettings (texture defaults to None).
+    /// Converts back to full [`MaterialSettings`], preserving texture type and foliage configs.
     pub fn to_material_settings(&self) -> MaterialSettings {
         MaterialSettings {
             base_color: self.base_color,
@@ -65,8 +84,11 @@ impl SerializableMaterial {
             emission_strength: self.emission_strength,
             roughness: self.roughness,
             metallic: self.metallic,
-            texture: TextureType::None,
+            texture: self.texture_type,
             uv_scale: self.uv_scale,
+            leaf_config: self.leaf_config.clone(),
+            twig_config: self.twig_config.clone(),
+            bark_config: self.bark_config.clone(),
         }
     }
 }
@@ -172,6 +194,8 @@ impl PlantGenotype {
                         roughness: mat.roughness,
                         metallic: mat.metallic,
                         uv_scale: mat.uv_scale,
+                        texture_type: mat.texture_type,
+                        ..Default::default()
                     },
                 )
             })
@@ -207,38 +231,42 @@ impl PlantGenotype {
         System::from_source(&self.source_code).ok()
     }
 
-    /// Mutates the material colors slightly.
+    /// Mutates material colors and foliage texture configs.
     fn mutate_materials<R: Rng>(&mut self, rng: &mut R, rate: f32) {
         for settings in self.materials.values_mut() {
             if rng.random::<f32>() < rate {
-                // Mutate base color slightly
                 for channel in &mut settings.base_color {
                     *channel = (*channel + (rng.random::<f32>() - 0.5) * 0.3).clamp(0.0, 1.0);
                 }
             }
             if rng.random::<f32>() < rate * 0.5 {
-                // Occasionally mutate roughness/metallic
                 settings.roughness =
                     (settings.roughness + (rng.random::<f32>() - 0.5) * 0.3).clamp(0.0, 1.0);
+            }
+            // Mutate active foliage texture config via its Genotype implementation
+            match settings.texture_type {
+                TextureType::Leaf => settings.leaf_config.mutate(rng, rate),
+                TextureType::Twig => settings.twig_config.mutate(rng, rate),
+                TextureType::Bark => settings.bark_config.mutate(rng, rate),
+                _ => {}
             }
         }
     }
 
-    /// Blends materials from two parents.
-    fn blend_materials(
+    /// Blends materials from two parents using foliage config crossover.
+    fn blend_materials<R: Rng>(
         a: &HashMap<u8, SerializableMaterial>,
         b: &HashMap<u8, SerializableMaterial>,
         blend: f32,
+        rng: &mut R,
     ) -> HashMap<u8, SerializableMaterial> {
         let mut result = HashMap::new();
 
-        // Collect all slot IDs from both parents
         let all_slots: std::collections::HashSet<_> = a.keys().chain(b.keys()).copied().collect();
 
         for slot in all_slots {
             let settings = match (a.get(&slot), b.get(&slot)) {
                 (Some(ma), Some(mb)) => {
-                    // Blend the two materials
                     let inv_blend = 1.0 - blend;
                     SerializableMaterial {
                         base_color: [
@@ -256,6 +284,11 @@ impl PlantGenotype {
                         emission_strength: ma.emission_strength * blend
                             + mb.emission_strength * inv_blend,
                         uv_scale: ma.uv_scale * blend + mb.uv_scale * inv_blend,
+                        texture_type: if blend >= 0.5 { ma.texture_type } else { mb.texture_type },
+                        // Use Genotype crossover for foliage configs
+                        leaf_config: ma.leaf_config.crossover(&mb.leaf_config, rng),
+                        twig_config: ma.twig_config.crossover(&mb.twig_config, rng),
+                        bark_config: ma.bark_config.crossover(&mb.bark_config, rng),
                     }
                 }
                 (Some(m), None) | (None, Some(m)) => m.clone(),
@@ -403,7 +436,7 @@ impl Genotype for PlantGenotype {
             } else {
                 other.finalization_code.clone()
             },
-            materials: Self::blend_materials(&self.materials, &other.materials, blend),
+            materials: Self::blend_materials(&self.materials, &other.materials, blend, rng),
             iterations: if rng.random::<bool>() {
                 self.iterations
             } else {

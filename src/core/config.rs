@@ -24,6 +24,7 @@ pub struct DirtyFlags {
 pub enum PropMeshType {
     #[default]
     Leaf,
+    Twig,
     Sphere,
     Cone,
     Cylinder,
@@ -33,6 +34,7 @@ pub enum PropMeshType {
 impl PropMeshType {
     pub const ALL: &'static [PropMeshType] = &[
         PropMeshType::Leaf,
+        PropMeshType::Twig,
         PropMeshType::Sphere,
         PropMeshType::Cone,
         PropMeshType::Cylinder,
@@ -42,6 +44,7 @@ impl PropMeshType {
     pub fn name(&self) -> &'static str {
         match self {
             PropMeshType::Leaf => "Leaf",
+            PropMeshType::Twig => "Twig",
             PropMeshType::Sphere => "Sphere",
             PropMeshType::Cone => "Cone",
             PropMeshType::Cylinder => "Cylinder",
@@ -151,6 +154,7 @@ pub fn apply_startup_preset(
                     emission_strength: mat.emission_strength,
                     uv_scale: mat.uv_scale,
                     texture: mat.texture_type,
+                    ..Default::default()
                 },
             );
         }

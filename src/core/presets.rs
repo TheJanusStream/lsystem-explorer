@@ -3,6 +3,9 @@ use bevy::math::Vec3;
 use crate::core::config::{PropMeshType, TextureType};
 
 /// Preset material configuration for material slot 0.
+///
+/// Foliage texture parameters (leaf/twig/bark configs) default when loaded from
+/// a preset and can be tuned via the material UI afterwards.
 #[derive(Clone, Copy)]
 pub struct PresetMaterial {
     pub base_color: [f32; 3],
@@ -17,7 +20,7 @@ pub struct PresetMaterial {
 impl Default for PresetMaterial {
     fn default() -> Self {
         Self {
-            base_color: [0.55, 0.27, 0.07], // Brown wood color
+            base_color: [0.55, 0.27, 0.07],
             roughness: 0.8,
             metallic: 0.0,
             emission_color: [0.0, 0.0, 0.0],
@@ -311,38 +314,41 @@ pub const PRESETS: &[LSystemPreset] = &[
         materials: &[
             (
                 0,
+                // Bark texture on branches
                 PresetMaterial {
                     base_color: [0.35, 0.2, 0.08],
                     roughness: 0.85,
                     metallic: 0.0,
                     emission_color: [0.0, 0.0, 0.0],
                     emission_strength: 0.0,
-                    uv_scale: 1.0,
-                    texture_type: TextureType::None,
+                    uv_scale: 3.0,
+                    texture_type: TextureType::Bark,
                 },
             ),
             (
                 1,
+                // Twig cards (composite foliage with leaves + stem)
                 PresetMaterial {
-                    base_color: [0.2, 1.0, 0.2],
-                    roughness: 0.5,
+                    base_color: [1.0, 1.0, 1.0],
+                    roughness: 0.7,
                     metallic: 0.0,
-                    emission_color: [0.0, 1.0, 0.0],
+                    emission_color: [0.0, 0.0, 0.0],
                     emission_strength: 0.0,
                     uv_scale: 1.0,
-                    texture_type: TextureType::None,
+                    texture_type: TextureType::Twig,
                 },
             ),
             (
                 2,
+                // Leaf cards (individual leaves, autumn-tinged)
                 PresetMaterial {
-                    base_color: [1.0, 0.2, 0.2],
-                    roughness: 0.3,
-                    metallic: 0.3,
-                    emission_color: [1.0, 0.2, 0.2],
+                    base_color: [1.0, 1.0, 1.0],
+                    roughness: 0.6,
+                    metallic: 0.0,
+                    emission_color: [0.0, 0.0, 0.0],
                     emission_strength: 0.0,
                     uv_scale: 1.0,
-                    texture_type: TextureType::None,
+                    texture_type: TextureType::Leaf,
                 },
             ),
         ],
@@ -352,6 +358,6 @@ pub const PRESETS: &[LSystemPreset] = &[
             pitch: std::f32::consts::TAU / 64.0,
             yaw: std::f32::consts::TAU / 5.0,
         }),
-        prop_meshes: &[(0, PropMeshType::Leaf), (1, PropMeshType::Sphere)],
+        prop_meshes: &[(0, PropMeshType::Twig), (1, PropMeshType::Leaf)],
     },
 ];

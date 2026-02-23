@@ -66,6 +66,7 @@ fn main() {
                 logic::derivation::poll_derivation,
                 logic::derivation::ensure_material_palette_size,
                 bevy_symbios::materials::sync_material_properties,
+                bevy_symbios::materials::apply_foliage_textures,
                 visuals::turtle::render_turtle,
                 visuals::turtle::toggle_editor_visibility,
                 visuals::nursery_render::rebuild_nursery_cache,
