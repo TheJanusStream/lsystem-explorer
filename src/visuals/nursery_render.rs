@@ -13,9 +13,15 @@ use crate::visuals::assets::PropMeshAssets;
 use bevy::math::{Affine2, Vec2};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
-use bevy::tasks::AsyncComputeTaskPool;
+use bevy::render::render_resource::Face;
+use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future};
 use bevy_symbios::LSystemMeshBuilder;
 use bevy_symbios::materials::ProceduralTextures;
+use bevy_symbios_texture::bark::BarkGenerator;
+use bevy_symbios_texture::generator::{TextureError, TextureGenerator, TextureMap};
+use bevy_symbios_texture::leaf::LeafGenerator;
+use bevy_symbios_texture::twig::TwigGenerator;
+use bevy_symbios_texture::{GeneratedHandles, map_to_images, map_to_images_card};
 use std::sync::{Arc, Mutex};
 use symbios::System;
 use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
@@ -77,6 +83,9 @@ pub fn setup_nursery_materials(
 }
 
 /// Creates a StandardMaterial from a MaterialSettings, using procedural textures if available.
+/// For foliage types (Leaf, Twig, Bark) the material is created with the correct
+/// alpha/double_sided settings but no texture — textures are applied async by
+/// `apply_nursery_foliage_textures`.
 fn material_from_settings(
     settings: &MaterialSettings,
     proc_textures: &ProceduralTextures,
@@ -84,19 +93,46 @@ fn material_from_settings(
     let emission_linear =
         Color::srgb_from_array(settings.emission_color).to_linear() * settings.emission_strength;
 
-    let base_color_texture = match settings.texture {
-        TextureType::None => None,
-        other => proc_textures.textures.get(&other).cloned(),
-    };
-
-    StandardMaterial {
-        base_color: Color::srgb_from_array(settings.base_color),
-        perceptual_roughness: settings.roughness,
-        metallic: settings.metallic,
-        emissive: emission_linear,
-        base_color_texture,
-        uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
-        ..default()
+    match settings.texture {
+        TextureType::None => StandardMaterial {
+            base_color: Color::srgb_from_array(settings.base_color),
+            perceptual_roughness: settings.roughness,
+            metallic: settings.metallic,
+            emissive: emission_linear,
+            uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
+            ..default()
+        },
+        TextureType::Grid | TextureType::Noise | TextureType::Checker => StandardMaterial {
+            base_color: Color::srgb_from_array(settings.base_color),
+            perceptual_roughness: settings.roughness,
+            metallic: settings.metallic,
+            emissive: emission_linear,
+            base_color_texture: proc_textures.textures.get(&settings.texture).cloned(),
+            uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
+            ..default()
+        },
+        TextureType::Leaf | TextureType::Twig => StandardMaterial {
+            base_color: Color::srgb_from_array(settings.base_color),
+            perceptual_roughness: settings.roughness,
+            metallic: settings.metallic,
+            emissive: emission_linear,
+            uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
+            alpha_mode: AlphaMode::Mask(0.5),
+            double_sided: true,
+            cull_mode: None,
+            ..default()
+        },
+        TextureType::Bark => StandardMaterial {
+            base_color: Color::srgb_from_array(settings.base_color),
+            perceptual_roughness: settings.roughness,
+            metallic: settings.metallic,
+            emissive: emission_linear,
+            uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
+            alpha_mode: AlphaMode::Opaque,
+            double_sided: false,
+            cull_mode: Some(Face::Back),
+            ..default()
+        },
     }
 }
 
@@ -201,6 +237,24 @@ struct GenotypeDerivedResult {
     fitness: f32,
     genotype: PlantGenotype,
     error: Option<String>,
+}
+
+type NurseryFoliageTask = (Task<Result<TextureMap, TextureError>>, Handle<StandardMaterial>, bool);
+
+/// Tracks in-flight async foliage texture generation tasks for nursery individuals.
+///
+/// Keyed by `(nursery_index, mat_slot)`. When a task completes, the generated
+/// textures are applied to the stored material handle.
+/// All tasks are cleared when the nursery rebuilds.
+#[derive(Resource, Default)]
+pub struct NurseryFoliageTextureTasks {
+    tasks: HashMap<(usize, u8), NurseryFoliageTask>,
+}
+
+impl NurseryFoliageTextureTasks {
+    fn clear(&mut self) {
+        self.tasks.clear();
+    }
 }
 
 /// Tracks pending async nursery derivation tasks.
@@ -339,8 +393,8 @@ pub fn render_nursery_population(
     mut materials: ResMut<Assets<StandardMaterial>>,
     proc_textures: Res<ProceduralTextures>,
     prop_assets: Res<PropMeshAssets>,
-    // Queries for existing nursery entities
     nursery_materials: Res<NurseryMaterials>,
+    mut foliage_tasks: ResMut<NurseryFoliageTextureTasks>,
     old_meshes: Query<Entity, With<NurseryMeshTag>>,
     old_props: Query<Entity, With<NurseryPropTag>>,
     old_labels: Query<Entity, With<NurseryLabelTag>>,
@@ -363,6 +417,9 @@ pub fn render_nursery_population(
         return;
     }
     cache.dirty = false;
+
+    // Discard any in-flight texture tasks — new ones will be spawned below.
+    foliage_tasks.clear();
 
     // Despawn old entities
     for entity in old_meshes
@@ -438,6 +495,38 @@ pub fn render_nursery_population(
             let (geno_materials, geno_fallback) =
                 create_genotype_materials(&cached.materials, &proc_textures, &mut materials);
 
+            // Spawn async foliage texture generation tasks for foliage material slots.
+            let pool = AsyncComputeTaskPool::get();
+            for (&slot, settings) in &cached.materials {
+                let Some(handle) = geno_materials.get(&slot).cloned() else {
+                    continue;
+                };
+                match settings.texture {
+                    TextureType::Leaf => {
+                        let config = settings.leaf_config.clone();
+                        let task = pool.spawn(async move {
+                            LeafGenerator::new(config).generate(512, 512)
+                        });
+                        foliage_tasks.tasks.insert((i, slot), (task, handle, true));
+                    }
+                    TextureType::Twig => {
+                        let config = settings.twig_config.clone();
+                        let task = pool.spawn(async move {
+                            TwigGenerator::new(config).generate(512, 512)
+                        });
+                        foliage_tasks.tasks.insert((i, slot), (task, handle, true));
+                    }
+                    TextureType::Bark => {
+                        let config = settings.bark_config.clone();
+                        let task = pool.spawn(async move {
+                            BarkGenerator::new(config).generate(512, 512)
+                        });
+                        foliage_tasks.tasks.insert((i, slot), (task, handle, false));
+                    }
+                    _ => {}
+                }
+            }
+
             // Spawn branch meshes
             for (material_id, mesh) in mesh_buckets {
                 let material = geno_materials
@@ -466,22 +555,36 @@ pub fn render_nursery_population(
                 let mesh_handle = prop_assets.meshes.get(&mesh_type);
 
                 if let Some(handle) = mesh_handle {
-                    // Create prop material by blending genotype material with prop color
                     let base_handle = geno_materials
                         .get(&prop.material_id)
                         .unwrap_or(&geno_fallback);
-                    let base_mat = materials.get(base_handle).cloned().unwrap_or_default();
-                    let base_srgba = base_mat.base_color.to_srgba();
-                    let blended = Color::srgba(
-                        base_srgba.red * prop.color.x,
-                        base_srgba.green * prop.color.y,
-                        base_srgba.blue * prop.color.z,
-                        base_srgba.alpha * prop.color.w,
-                    );
-                    let prop_material = materials.add(StandardMaterial {
-                        base_color: blended,
-                        ..base_mat
-                    });
+
+                    // For foliage-textured materials, share the base handle directly so
+                    // async texture updates (from apply_nursery_foliage_textures) propagate
+                    // automatically.  For other types, create a tint-blended clone.
+                    let is_foliage = cached
+                        .materials
+                        .get(&prop.material_id)
+                        .is_some_and(|s| {
+                            matches!(s.texture, TextureType::Leaf | TextureType::Twig | TextureType::Bark)
+                        });
+
+                    let prop_material = if is_foliage {
+                        base_handle.clone()
+                    } else {
+                        let base_mat = materials.get(base_handle).cloned().unwrap_or_default();
+                        let base_srgba = base_mat.base_color.to_srgba();
+                        let blended = Color::srgba(
+                            base_srgba.red * prop.color.x,
+                            base_srgba.green * prop.color.y,
+                            base_srgba.blue * prop.color.z,
+                            base_srgba.alpha * prop.color.w,
+                        );
+                        materials.add(StandardMaterial {
+                            base_color: blended,
+                            ..base_mat
+                        })
+                    };
 
                     commands.spawn((
                         Mesh3d(handle.clone()),
@@ -596,6 +699,55 @@ pub fn handle_panel_clicks(
         if (hit_point.x - cx).abs() <= half_panel && (hit_point.z - cz).abs() <= half_panel {
             nursery.toggle_selection(i);
             return;
+        }
+    }
+}
+
+/// Polls completed nursery foliage texture tasks and applies the generated
+/// textures to the corresponding [`StandardMaterial`] handles.
+pub fn apply_nursery_foliage_textures(
+    mut foliage_tasks: ResMut<NurseryFoliageTextureTasks>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut images: ResMut<Assets<Image>>,
+) {
+    type FinishedEntry = ((usize, u8), Result<TextureMap, TextureError>, bool);
+    let mut finished: Vec<FinishedEntry> = Vec::new();
+
+    for (key, (task, _handle, is_card)) in foliage_tasks.tasks.iter_mut() {
+        if let Some(result) = block_on(future::poll_once(task)) {
+            finished.push((*key, result, *is_card));
+        }
+    }
+
+    for (key, result, is_card) in finished {
+        let (_index, _slot) = key;
+        let handle = match foliage_tasks.tasks.remove(&key) {
+            Some((_task, h, _)) => h,
+            None => continue,
+        };
+
+        let map = match result {
+            Ok(m) => m,
+            Err(e) => {
+                bevy::log::error!(
+                    "Nursery foliage texture generation failed for ({}, {}): {e}",
+                    _index,
+                    _slot
+                );
+                continue;
+            }
+        };
+
+        let handles: GeneratedHandles = if is_card {
+            map_to_images_card(map, &mut images)
+        } else {
+            map_to_images(map, &mut images)
+        };
+
+        if let Some(mat) = materials.get_mut(&handle) {
+            mat.base_color_texture = Some(handles.albedo);
+            mat.normal_map_texture = Some(handles.normal);
+            mat.metallic_roughness_texture = Some(handles.roughness);
         }
     }
 }

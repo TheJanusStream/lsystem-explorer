@@ -376,10 +376,13 @@ pub fn ui_system(
                     });
 
                     ui.collapsing("Material Palette", |ui| {
-                        bevy_symbios::ui::material_palette_editor(
+                        let changed = bevy_symbios::ui::material_palette_editor(
                             ui,
-                            &mut material_settings.settings,
+                            &mut material_settings.bypass_change_detection().settings,
                         );
+                        if changed {
+                            material_settings.set_changed();
+                        }
                     });
 
                     ui.collapsing("Prop Settings", |ui| {

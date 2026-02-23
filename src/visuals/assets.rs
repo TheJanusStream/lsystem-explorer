@@ -41,6 +41,7 @@ fn create_foliage_card(width: f32, height: f32) -> Mesh {
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
     mesh.insert_indices(indices);
+    let _ = mesh.generate_tangents();
     mesh
 }
 
