@@ -27,7 +27,7 @@ fn mix_seed(base_seed: u64, generation: usize, index: usize) -> u64 {
 }
 
 /// Spacing between plants in the 3D grid (world units).
-pub const GRID_SPACING: f32 = 750.0;
+pub const GRID_SPACING: f32 = 1750.0;
 
 /// Component tag for nursery 3D meshes (branches).
 #[derive(Component)]

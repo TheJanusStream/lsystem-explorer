@@ -26,7 +26,7 @@ pub fn setup_scene(mut commands: Commands) {
     commands.spawn((
         PanOrbitCamera {
             focus: Vec3::new(0.0, 400.0, 0.0),
-            yaw: Some(TAU / 5.0),
+            yaw: Some(TAU / 16.0),
             pitch: Some(TAU / 64.0),
             radius: Some(1200.0),
             button_orbit: MouseButton::Right,

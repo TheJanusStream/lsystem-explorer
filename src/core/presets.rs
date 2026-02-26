@@ -295,20 +295,20 @@ pub const PRESETS: &[LSystemPreset] = &[
                #define vr 1.732\n\
                #define ps 60.0\n\
                #define s 50.0\n\
-               omega: !(th)F(4*s)/(45)A,(1)~(0,ps)\n\
-               p0: A : 0.7 -> !(th*vr)F(s)[&(a)F(s)A,(1)~(0,ps)]/(d1)[&(a)F(s)A,(1)~(0,ps)]/(d2)[&(a)F(s)A,(1)~(0,ps)]\n\
+               omega: !(th)F(4*s)/(45)A[B]\n\
+               p0: A : 0.7 -> !(th*vr)F(s)[&(a)F(s)A[B]]/(d1)[&(a)F(s)A[B]]/(d2)[&(a)F(s)A[B]]\n\
                p1: A : 0.3 -> !(th*vr)F(s)A\n\
                p2: F(l) : * -> F(l*lr)\n\
                p3: !(w) : * -> !(w*vr)\n\
-               p4: ,(id) : id = 1 -> ,(2)\n\
-               p5: ,(id) : id = 2 -> \n\
-               p6: ~(id,sc) : id = 0 -> ~(1,sc)\n\
-               p7: ~(id,sc) : id = 1 ->",
+               p4: B : * -> \n\
+               p5: B -> \n\
+               /// DECOMPOSITION ///\n\
+               p6: B : * -> ,(1)~(0,ps)",
         iterations: 6,
         angle: 36.0,
         step: 1.0,
         width: 0.1,
-        elasticity: 0.25,
+        elasticity: 0.05,
         tropism: Some(Vec3::new(0.0, -1.0, 0.0)),
         initial_color: None,
         materials: &[
@@ -317,11 +317,11 @@ pub const PRESETS: &[LSystemPreset] = &[
                 // Bark texture on branches
                 PresetMaterial {
                     base_color: [0.35, 0.2, 0.08],
-                    roughness: 0.85,
+                    roughness: 0.95,
                     metallic: 0.0,
                     emission_color: [0.0, 0.0, 0.0],
                     emission_strength: 0.0,
-                    uv_scale: 3.0,
+                    uv_scale: 1.5,
                     texture_type: TextureType::Bark,
                 },
             ),

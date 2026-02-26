@@ -67,7 +67,7 @@ impl Default for PropConfig {
         prop_meshes.insert(1, PropMeshType::Sphere);
         Self {
             prop_meshes,
-            prop_scale: 1.0,
+            prop_scale: 3.0,
         }
     }
 }
