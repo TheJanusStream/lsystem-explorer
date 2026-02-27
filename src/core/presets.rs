@@ -288,22 +288,27 @@ pub const PRESETS: &[LSystemPreset] = &[
     LSystemPreset {
         name: "Ternary Tree (+Props +Materials +Variations)",
         code: "#define d1 180\n\
-               #define th 2.5\n\
+               #define th 3.5\n\
                #define d2 252\n\
                #define a 36\n\
-               #define lr 1.07\n\
-               #define vr 1.732\n\
+               #define lr 1.12\n\
+               #define vr 1.532\n\
                #define ps 60.0\n\
                #define s 50.0\n\
-               omega: !(th)F(4*s)/(45)A[B]\n\
+               #define ir 10.0\n\
+               omega: C(0.0)!(th)F(4*s)/(45)A[B]\n\
                p0: A : 0.7 -> !(th*vr)F(s)[&(a)F(s)A[B]]/(d1)[&(a)F(s)A[B]]/(d2)[&(a)F(s)A[B]]\n\
-               p1: A : 0.3 -> !(th*vr)F(s)A\n\
+               p1: A : 0.3 -> !(th*vr)F(s)A[B]\n\
                p2: F(l) : * -> F(l*lr)\n\
                p3: !(w) : * -> !(w*vr)\n\
                p4: B : * -> \n\
                p5: B -> \n\
+               p6: C(x) : 0.7 -> C(x)\n\
+               p7: C(x) : 0.3 -> C(x-ir)\n\
                /// DECOMPOSITION ///\n\
-               p6: B : * -> ,(1)~(0,ps)",
+               p8: B : * -> ,(1)~(0,ps)\n\
+               /// DECOMPOSITION ///\n\
+               p9: C(x) : * -> /(x)",
         iterations: 6,
         angle: 36.0,
         step: 1.0,
@@ -330,7 +335,7 @@ pub const PRESETS: &[LSystemPreset] = &[
                 // Twig cards (composite foliage with leaves + stem)
                 PresetMaterial {
                     base_color: [1.0, 1.0, 1.0],
-                    roughness: 0.7,
+                    roughness: 1.0,
                     metallic: 0.0,
                     emission_color: [0.0, 0.0, 0.0],
                     emission_strength: 0.0,
