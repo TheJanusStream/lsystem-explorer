@@ -20,7 +20,7 @@ A real-time 3D L-system visualization tool built with [Bevy](https://bevyengine.
 - **Tropism & Elasticity** — Gravity-influenced growth simulation
 
 ### Genetic Breeding (Nursery)
-- **Interactive Evolutionary Computation** — 3x3 population grid rendered in 3D world space
+- **Interactive Evolutionary Computation** — Adjustable NxN population grid (default 3x3, up to 8x8) rendered in 3D world space
 - **Champion Selection** — Click individuals to mark as breeding parents; selected plants show translucent highlight panels
 - **Mutation & Crossover** — Evolve rules, constants, materials, angles, step sizes, widths, elasticity, and tropism
 - **Adjustable Mutation Rate** — Control evolution intensity per generation
@@ -59,7 +59,7 @@ Presets from Prusinkiewicz & Lindenmayer's *The Algorithmic Beauty of Plants*:
 | Monopodial Tree | Fig 2.6 | Spiral phyllotaxis, 3 branch types |
 | Sympodial Tree | Fig 2.7 | Sympodial branching architecture |
 | Ternary Tree (Gravity) | Fig 2.8 | Tropism and elasticity simulation |
-| Ternary Tree (+Props +Materials) | — | Stochastic rules, 3 materials, leaf and sphere props |
+| Ternary Tree (+Props +Materials +Variations) | — | Stochastic rules, 3 materials, twig and leaf props |
 
 ## Grammar Syntax
 
@@ -98,8 +98,9 @@ Presets from Prusinkiewicz & Lindenmayer's *The Algorithmic Beauty of Plants*:
 | `'` | `(r, g, b)` | Set vertex color (0.0–1.0 per channel) |
 | `~` | `(prop_id, scale)` | Spawn a prop at current position |
 
-Prop ID to mesh mapping (configurable in the UI):
-- 0 = Leaf, 1 = Sphere, 2 = Cone, 3 = Cylinder, 4 = Cube
+Available prop mesh types (prop ID to mesh mapping is configurable in the UI):
+
+- Leaf, Twig, Sphere, Cone, Cylinder, Cube
 
 ### Conditions
 
@@ -234,6 +235,7 @@ cargo test
 - [Bevy](https://bevyengine.org/) 0.18 — Game engine and renderer
 - [bevy_egui](https://github.com/mvlabat/bevy_egui) — Immediate mode UI
 - [bevy_panorbit_camera](https://github.com/Plonq/bevy_panorbit_camera) — Orbit camera controls
+- [bevy_symbios_texture](https://github.com/TheJanusStream/bevy_symbios_texture) — Procedural foliage and bark texture generation
 
 ### Symbios Ecosystem
 

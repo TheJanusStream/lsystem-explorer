@@ -1,6 +1,6 @@
 //! 3D rendering for the nursery population grid.
 //!
-//! This module provides systems to render the 9-individual population
+//! This module provides systems to render the NxN population
 //! as a 3D grid when nursery mode is active.
 
 use crate::core::config::{LSystemConfig, MaterialSettings, PropConfig, PropMeshType, TextureType};

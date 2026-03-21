@@ -2,7 +2,7 @@ use bevy::math::Vec3;
 
 use crate::core::config::{PropMeshType, TextureType};
 
-/// Preset material configuration for material slot 0.
+/// Preset material configuration for a material slot.
 ///
 /// Foliage texture parameters (leaf/twig/bark configs) default when loaded from
 /// a preset and can be tuned via the material UI afterwards.
