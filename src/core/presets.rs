@@ -4,8 +4,9 @@ use crate::core::config::{PropMeshType, TextureType};
 
 /// Preset material configuration for a material slot.
 ///
-/// Foliage texture parameters (leaf/twig/bark configs) default when loaded from
-/// a preset and can be tuned via the material UI afterwards.
+/// `texture` is a `fn` pointer (const-evaluable, unlike a payload-bearing
+/// [`TextureType`]) that constructs the texture variant at preset-apply time.
+/// Tweak the procedural config in the material UI afterwards.
 #[derive(Clone, Copy)]
 pub struct PresetMaterial {
     pub base_color: [f32; 3],
@@ -14,7 +15,7 @@ pub struct PresetMaterial {
     pub emission_color: [f32; 3],
     pub emission_strength: f32,
     pub uv_scale: f32,
-    pub texture_type: TextureType,
+    pub texture: fn() -> TextureType,
 }
 
 impl Default for PresetMaterial {
@@ -26,9 +27,32 @@ impl Default for PresetMaterial {
             emission_color: [0.0, 0.0, 0.0],
             emission_strength: 0.0,
             uv_scale: 1.0,
-            texture_type: TextureType::None,
+            texture: preset_texture_none,
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Texture builders — referenced as `fn` pointers from `PresetMaterial.texture`.
+// ---------------------------------------------------------------------------
+
+pub fn preset_texture_none() -> TextureType {
+    TextureType::None
+}
+
+pub fn preset_texture_bark() -> TextureType {
+    use bevy_symbios_texture::{TextureConfig, bark::BarkConfig};
+    TextureType::Procedural(TextureConfig::Bark(BarkConfig::default()))
+}
+
+pub fn preset_texture_twig() -> TextureType {
+    use bevy_symbios_texture::{TextureConfig, twig::TwigConfig};
+    TextureType::Procedural(TextureConfig::Twig(TwigConfig::default()))
+}
+
+pub fn preset_texture_leaf() -> TextureType {
+    use bevy_symbios_texture::{TextureConfig, leaf::LeafConfig};
+    TextureType::Procedural(TextureConfig::Leaf(LeafConfig::default()))
 }
 
 /// Preset camera configuration.
@@ -91,7 +115,7 @@ pub const PRESETS: &[LSystemPreset] = &[
                 emission_color: [0.0, 0.0, 0.0],
                 emission_strength: 0.0,
                 uv_scale: 1.0,
-                texture_type: TextureType::None,
+                texture: preset_texture_none,
             },
         )],
         camera: Some(PresetCamera {
@@ -127,7 +151,7 @@ pub const PRESETS: &[LSystemPreset] = &[
                 emission_color: [0.0, 0.0, 0.0],
                 emission_strength: 0.0,
                 uv_scale: 1.0,
-                texture_type: TextureType::None,
+                texture: preset_texture_none,
             },
         )],
         camera: Some(PresetCamera {
@@ -159,7 +183,7 @@ pub const PRESETS: &[LSystemPreset] = &[
                 emission_color: [0.0, 0.0, 0.0],
                 emission_strength: 0.0,
                 uv_scale: 1.0,
-                texture_type: TextureType::None,
+                texture: preset_texture_none,
             },
         )],
         camera: Some(PresetCamera {
@@ -198,7 +222,7 @@ pub const PRESETS: &[LSystemPreset] = &[
                 emission_color: [0.0, 0.0, 0.0],
                 emission_strength: 0.0,
                 uv_scale: 1.0,
-                texture_type: TextureType::None,
+                texture: preset_texture_none,
             },
         )],
         camera: Some(PresetCamera {
@@ -235,7 +259,7 @@ pub const PRESETS: &[LSystemPreset] = &[
                 emission_color: [0.0, 0.0, 0.0],
                 emission_strength: 0.0,
                 uv_scale: 1.0,
-                texture_type: TextureType::None,
+                texture: preset_texture_none,
             },
         )],
         camera: Some(PresetCamera {
@@ -274,7 +298,7 @@ pub const PRESETS: &[LSystemPreset] = &[
                 emission_color: [0.0, 0.0, 0.0],
                 emission_strength: 0.0,
                 uv_scale: 1.0,
-                texture_type: TextureType::None,
+                texture: preset_texture_none,
             },
         )],
         camera: Some(PresetCamera {
@@ -327,7 +351,7 @@ pub const PRESETS: &[LSystemPreset] = &[
                     emission_color: [0.0, 0.0, 0.0],
                     emission_strength: 0.0,
                     uv_scale: 1.5,
-                    texture_type: TextureType::Bark,
+                    texture: preset_texture_bark,
                 },
             ),
             (
@@ -340,7 +364,7 @@ pub const PRESETS: &[LSystemPreset] = &[
                     emission_color: [0.0, 0.0, 0.0],
                     emission_strength: 0.0,
                     uv_scale: 1.0,
-                    texture_type: TextureType::Twig,
+                    texture: preset_texture_twig,
                 },
             ),
             (
@@ -353,7 +377,7 @@ pub const PRESETS: &[LSystemPreset] = &[
                     emission_color: [0.0, 0.0, 0.0],
                     emission_strength: 0.0,
                     uv_scale: 1.0,
-                    texture_type: TextureType::Leaf,
+                    texture: preset_texture_leaf,
                 },
             ),
         ],

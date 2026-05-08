@@ -13,18 +13,81 @@ use crate::visuals::assets::PropMeshAssets;
 use bevy::math::{Affine2, Vec2};
 use bevy::platform::collections::HashMap;
 use bevy::prelude::*;
-use bevy::render::render_resource::Face;
 use bevy::tasks::{AsyncComputeTaskPool, Task, block_on, futures_lite::future};
 use bevy_symbios::LSystemMeshBuilder;
 use bevy_symbios::materials::ProceduralTextures;
+use bevy_symbios_texture::TextureConfig;
+use bevy_symbios_texture::ashlar::AshlarGenerator;
+use bevy_symbios_texture::asphalt::AsphaltGenerator;
 use bevy_symbios_texture::bark::BarkGenerator;
+use bevy_symbios_texture::brick::BrickGenerator;
+use bevy_symbios_texture::cobblestone::CobblestoneGenerator;
+use bevy_symbios_texture::concrete::ConcreteGenerator;
+use bevy_symbios_texture::corrugated::CorrugatedGenerator;
+use bevy_symbios_texture::encaustic::EncausticGenerator;
 use bevy_symbios_texture::generator::{TextureError, TextureGenerator, TextureMap};
+use bevy_symbios_texture::ground::GroundGenerator;
+use bevy_symbios_texture::iron_grille::IronGrilleGenerator;
 use bevy_symbios_texture::leaf::LeafGenerator;
+use bevy_symbios_texture::marble::MarbleGenerator;
+use bevy_symbios_texture::metal::MetalGenerator;
+use bevy_symbios_texture::pavers::PaversGenerator;
+use bevy_symbios_texture::plank::PlankGenerator;
+use bevy_symbios_texture::rock::RockGenerator;
+use bevy_symbios_texture::shingle::ShingleGenerator;
+use bevy_symbios_texture::stained_glass::StainedGlassGenerator;
+use bevy_symbios_texture::stucco::StuccoGenerator;
+use bevy_symbios_texture::thatch::ThatchGenerator;
 use bevy_symbios_texture::twig::TwigGenerator;
+use bevy_symbios_texture::wainscoting::WainscotingGenerator;
+use bevy_symbios_texture::window::WindowGenerator;
 use bevy_symbios_texture::{GeneratedHandles, map_to_images, map_to_images_card};
 use std::sync::{Arc, Mutex};
 use symbios::System;
 use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
+
+/// Synchronously runs the generator that corresponds to `cfg` at `width × height`.
+/// Returns `Err(TextureError::Internal)` for `TextureConfig::None`.
+fn spawn_nursery_generator_blocking(
+    cfg: &TextureConfig,
+    width: u32,
+    height: u32,
+) -> Result<TextureMap, TextureError> {
+    macro_rules! run {
+        ($Generator:ident, $cfg:expr) => {{ $Generator::new($cfg.clone()).generate(width, height) }};
+    }
+    match cfg {
+        // Caller filters Procedural before spawning, so None is unreachable in
+        // practice; emit a benign error rather than panic if it slips through.
+        TextureConfig::None => Err(TextureError::ZeroDimension {
+            width: 0,
+            height: 0,
+        }),
+        TextureConfig::Leaf(c) => run!(LeafGenerator, c),
+        TextureConfig::Twig(c) => run!(TwigGenerator, c),
+        TextureConfig::Bark(c) => run!(BarkGenerator, c),
+        TextureConfig::Window(c) => run!(WindowGenerator, c),
+        TextureConfig::StainedGlass(c) => run!(StainedGlassGenerator, c),
+        TextureConfig::IronGrille(c) => run!(IronGrilleGenerator, c),
+        TextureConfig::Ground(c) => run!(GroundGenerator, c),
+        TextureConfig::Rock(c) => run!(RockGenerator, c),
+        TextureConfig::Brick(c) => run!(BrickGenerator, c),
+        TextureConfig::Plank(c) => run!(PlankGenerator, c),
+        TextureConfig::Shingle(c) => run!(ShingleGenerator, c),
+        TextureConfig::Stucco(c) => run!(StuccoGenerator, c),
+        TextureConfig::Concrete(c) => run!(ConcreteGenerator, c),
+        TextureConfig::Metal(c) => run!(MetalGenerator, c),
+        TextureConfig::Pavers(c) => run!(PaversGenerator, c),
+        TextureConfig::Ashlar(c) => run!(AshlarGenerator, c),
+        TextureConfig::Cobblestone(c) => run!(CobblestoneGenerator, c),
+        TextureConfig::Thatch(c) => run!(ThatchGenerator, c),
+        TextureConfig::Marble(c) => run!(MarbleGenerator, c),
+        TextureConfig::Corrugated(c) => run!(CorrugatedGenerator, c),
+        TextureConfig::Asphalt(c) => run!(AsphaltGenerator, c),
+        TextureConfig::Wainscoting(c) => run!(WainscotingGenerator, c),
+        TextureConfig::Encaustic(c) => run!(EncausticGenerator, c),
+    }
+}
 
 /// Cached material handles for nursery selection panels.
 /// Created once at startup to avoid per-frame allocations.
@@ -93,7 +156,7 @@ fn material_from_settings(
     let emission_linear =
         Color::srgb_from_array(settings.emission_color).to_linear() * settings.emission_strength;
 
-    match settings.texture {
+    match &settings.texture {
         TextureType::None => StandardMaterial {
             base_color: Color::srgb_from_array(settings.base_color),
             perceptual_roughness: settings.roughness,
@@ -102,35 +165,28 @@ fn material_from_settings(
             uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
             ..default()
         },
-        TextureType::Grid | TextureType::Noise | TextureType::Checker => StandardMaterial {
-            base_color: Color::srgb_from_array(settings.base_color),
-            perceptual_roughness: settings.roughness,
-            metallic: settings.metallic,
-            emissive: emission_linear,
-            base_color_texture: proc_textures.textures.get(&settings.texture).cloned(),
-            uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
-            ..default()
-        },
-        TextureType::Leaf | TextureType::Twig => StandardMaterial {
-            base_color: Color::srgb_from_array(settings.base_color),
-            perceptual_roughness: settings.roughness,
-            metallic: settings.metallic,
-            emissive: emission_linear,
-            uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
-            alpha_mode: AlphaMode::Mask(0.5),
-            double_sided: true,
-            cull_mode: None,
-            ..default()
-        },
-        TextureType::Bark => StandardMaterial {
+        inline @ (TextureType::Grid | TextureType::Noise | TextureType::Checker) => {
+            StandardMaterial {
+                base_color: Color::srgb_from_array(settings.base_color),
+                perceptual_roughness: settings.roughness,
+                metallic: settings.metallic,
+                emissive: emission_linear,
+                base_color_texture: inline
+                    .inline_preview_key()
+                    .and_then(|k| proc_textures.textures.get(&k).cloned()),
+                uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
+                ..default()
+            }
+        }
+        TextureType::Procedural(cfg) => StandardMaterial {
             base_color: Color::srgb_from_array(settings.base_color),
             perceptual_roughness: settings.roughness,
             metallic: settings.metallic,
             emissive: emission_linear,
             uv_transform: Affine2::from_scale(Vec2::splat(settings.uv_scale)),
-            alpha_mode: AlphaMode::Opaque,
-            double_sided: false,
-            cull_mode: Some(Face::Back),
+            alpha_mode: cfg.render_properties().alpha_mode,
+            double_sided: cfg.render_properties().double_sided,
+            cull_mode: cfg.render_properties().cull_mode,
             ..default()
         },
     }
@@ -502,32 +558,21 @@ pub fn render_nursery_population(
             let (geno_materials, geno_fallback) =
                 create_genotype_materials(&cached.materials, &proc_textures, &mut materials);
 
-            // Spawn async foliage texture generation tasks for foliage material slots.
+            // Spawn async procedural texture generation tasks for procedural material slots.
             let pool = AsyncComputeTaskPool::get();
             for (&slot, settings) in &cached.materials {
                 let Some(handle) = geno_materials.get(&slot).cloned() else {
                     continue;
                 };
-                match settings.texture {
-                    TextureType::Leaf => {
-                        let config = settings.leaf_config.clone();
-                        let task = pool
-                            .spawn(async move { LeafGenerator::new(config).generate(512, 512) });
-                        foliage_tasks.tasks.insert((i, slot), (task, handle, true));
-                    }
-                    TextureType::Twig => {
-                        let config = settings.twig_config.clone();
-                        let task = pool
-                            .spawn(async move { TwigGenerator::new(config).generate(512, 512) });
-                        foliage_tasks.tasks.insert((i, slot), (task, handle, true));
-                    }
-                    TextureType::Bark => {
-                        let config = settings.bark_config.clone();
-                        let task = pool
-                            .spawn(async move { BarkGenerator::new(config).generate(512, 512) });
-                        foliage_tasks.tasks.insert((i, slot), (task, handle, false));
-                    }
-                    _ => {}
+                if let TextureType::Procedural(cfg) = &settings.texture {
+                    let is_card = cfg.render_properties().is_card;
+                    let cfg_owned = cfg.clone();
+                    let task = pool.spawn(async move {
+                        spawn_nursery_generator_blocking(&cfg_owned, 512, 512)
+                    });
+                    foliage_tasks
+                        .tasks
+                        .insert((i, slot), (task, handle, is_card));
                 }
             }
 
@@ -563,18 +608,13 @@ pub fn render_nursery_population(
                         .get(&(prop.material_id as u16))
                         .unwrap_or(&geno_fallback);
 
-                    // For foliage-textured materials, share the base handle directly so
+                    // For procedural-textured materials, share the base handle directly so
                     // async texture updates (from apply_nursery_foliage_textures) propagate
                     // automatically.  For other types, create a tint-blended clone.
                     let is_foliage = cached
                         .materials
                         .get(&(prop.material_id as u16))
-                        .is_some_and(|s| {
-                            matches!(
-                                s.texture,
-                                TextureType::Leaf | TextureType::Twig | TextureType::Bark
-                            )
-                        });
+                        .is_some_and(|s| matches!(s.texture, TextureType::Procedural(_)));
 
                     let prop_material = if is_foliage {
                         base_handle.clone()

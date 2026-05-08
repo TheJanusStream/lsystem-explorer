@@ -9,9 +9,7 @@
 
 use bevy::platform::collections::HashMap;
 use bevy_symbios::materials::{MaterialSettings, TextureType};
-use bevy_symbios_texture::bark::BarkConfig;
-use bevy_symbios_texture::leaf::LeafConfig;
-use bevy_symbios_texture::twig::TwigConfig;
+use bevy_symbios_texture::TextureConfig;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use symbios::System;
@@ -19,10 +17,150 @@ use symbios::system::crossover::CrossoverConfig;
 use symbios::system::mutate::{MutationConfig, StructuralMutationConfig};
 use symbios_genetics::Genotype;
 
+/// Mutates the active variant of a [`TextureConfig`] in place via its
+/// [`Genotype`] impl. No-op for [`TextureConfig::None`].
+fn mutate_texture_config<R: Rng>(cfg: &mut TextureConfig, rng: &mut R, rate: f32) {
+    match cfg {
+        TextureConfig::None => {}
+        TextureConfig::Leaf(c) => c.mutate(rng, rate),
+        TextureConfig::Twig(c) => c.mutate(rng, rate),
+        TextureConfig::Bark(c) => c.mutate(rng, rate),
+        TextureConfig::Window(c) => c.mutate(rng, rate),
+        TextureConfig::StainedGlass(c) => c.mutate(rng, rate),
+        TextureConfig::IronGrille(c) => c.mutate(rng, rate),
+        TextureConfig::Ground(c) => c.mutate(rng, rate),
+        TextureConfig::Rock(c) => c.mutate(rng, rate),
+        TextureConfig::Brick(c) => c.mutate(rng, rate),
+        TextureConfig::Plank(c) => c.mutate(rng, rate),
+        TextureConfig::Shingle(c) => c.mutate(rng, rate),
+        TextureConfig::Stucco(c) => c.mutate(rng, rate),
+        TextureConfig::Concrete(c) => c.mutate(rng, rate),
+        TextureConfig::Metal(c) => c.mutate(rng, rate),
+        TextureConfig::Pavers(c) => c.mutate(rng, rate),
+        TextureConfig::Ashlar(c) => c.mutate(rng, rate),
+        TextureConfig::Cobblestone(c) => c.mutate(rng, rate),
+        TextureConfig::Thatch(c) => c.mutate(rng, rate),
+        TextureConfig::Marble(c) => c.mutate(rng, rate),
+        TextureConfig::Corrugated(c) => c.mutate(rng, rate),
+        TextureConfig::Asphalt(c) => c.mutate(rng, rate),
+        TextureConfig::Wainscoting(c) => c.mutate(rng, rate),
+        TextureConfig::Encaustic(c) => c.mutate(rng, rate),
+    }
+}
+
+/// Crosses over two [`TextureConfig`] values when both are the same generator
+/// variant, otherwise returns a clone of one parent.
+fn crossover_texture_config<R: Rng>(
+    a: &TextureConfig,
+    b: &TextureConfig,
+    rng: &mut R,
+) -> TextureConfig {
+    match (a, b) {
+        (TextureConfig::Leaf(x), TextureConfig::Leaf(y)) => {
+            TextureConfig::Leaf(x.crossover(y, rng))
+        }
+        (TextureConfig::Twig(x), TextureConfig::Twig(y)) => {
+            TextureConfig::Twig(x.crossover(y, rng))
+        }
+        (TextureConfig::Bark(x), TextureConfig::Bark(y)) => {
+            TextureConfig::Bark(x.crossover(y, rng))
+        }
+        (TextureConfig::Window(x), TextureConfig::Window(y)) => {
+            TextureConfig::Window(x.crossover(y, rng))
+        }
+        (TextureConfig::StainedGlass(x), TextureConfig::StainedGlass(y)) => {
+            TextureConfig::StainedGlass(x.crossover(y, rng))
+        }
+        (TextureConfig::IronGrille(x), TextureConfig::IronGrille(y)) => {
+            TextureConfig::IronGrille(x.crossover(y, rng))
+        }
+        (TextureConfig::Ground(x), TextureConfig::Ground(y)) => {
+            TextureConfig::Ground(x.crossover(y, rng))
+        }
+        (TextureConfig::Rock(x), TextureConfig::Rock(y)) => {
+            TextureConfig::Rock(x.crossover(y, rng))
+        }
+        (TextureConfig::Brick(x), TextureConfig::Brick(y)) => {
+            TextureConfig::Brick(x.crossover(y, rng))
+        }
+        (TextureConfig::Plank(x), TextureConfig::Plank(y)) => {
+            TextureConfig::Plank(x.crossover(y, rng))
+        }
+        (TextureConfig::Shingle(x), TextureConfig::Shingle(y)) => {
+            TextureConfig::Shingle(x.crossover(y, rng))
+        }
+        (TextureConfig::Stucco(x), TextureConfig::Stucco(y)) => {
+            TextureConfig::Stucco(x.crossover(y, rng))
+        }
+        (TextureConfig::Concrete(x), TextureConfig::Concrete(y)) => {
+            TextureConfig::Concrete(x.crossover(y, rng))
+        }
+        (TextureConfig::Metal(x), TextureConfig::Metal(y)) => {
+            TextureConfig::Metal(x.crossover(y, rng))
+        }
+        (TextureConfig::Pavers(x), TextureConfig::Pavers(y)) => {
+            TextureConfig::Pavers(x.crossover(y, rng))
+        }
+        (TextureConfig::Ashlar(x), TextureConfig::Ashlar(y)) => {
+            TextureConfig::Ashlar(x.crossover(y, rng))
+        }
+        (TextureConfig::Cobblestone(x), TextureConfig::Cobblestone(y)) => {
+            TextureConfig::Cobblestone(x.crossover(y, rng))
+        }
+        (TextureConfig::Thatch(x), TextureConfig::Thatch(y)) => {
+            TextureConfig::Thatch(x.crossover(y, rng))
+        }
+        (TextureConfig::Marble(x), TextureConfig::Marble(y)) => {
+            TextureConfig::Marble(x.crossover(y, rng))
+        }
+        (TextureConfig::Corrugated(x), TextureConfig::Corrugated(y)) => {
+            TextureConfig::Corrugated(x.crossover(y, rng))
+        }
+        (TextureConfig::Asphalt(x), TextureConfig::Asphalt(y)) => {
+            TextureConfig::Asphalt(x.crossover(y, rng))
+        }
+        (TextureConfig::Wainscoting(x), TextureConfig::Wainscoting(y)) => {
+            TextureConfig::Wainscoting(x.crossover(y, rng))
+        }
+        (TextureConfig::Encaustic(x), TextureConfig::Encaustic(y)) => {
+            TextureConfig::Encaustic(x.crossover(y, rng))
+        }
+        // Mismatched variants (or None): pick one parent.
+        _ => a.clone(),
+    }
+}
+
+/// Blends two [`TextureType`] values for crossover.
+///
+/// Picks one parent's variant by `blend` weight; if both share the same
+/// procedural generator, the inner config is also crossed over.
+fn blend_texture_type<R: Rng>(
+    a: &TextureType,
+    b: &TextureType,
+    blend: f32,
+    rng: &mut R,
+) -> TextureType {
+    match (a, b) {
+        (TextureType::Procedural(ca), TextureType::Procedural(cb)) => {
+            TextureType::Procedural(crossover_texture_config(ca, cb, rng))
+        }
+        _ => {
+            if blend >= 0.5 {
+                a.clone()
+            } else {
+                b.clone()
+            }
+        }
+    }
+}
+
 use crate::core::config::{PropMeshType, scan_max_material_id, split_source_code};
 use crate::core::presets::LSystemPreset;
 
 /// Serializable version of material settings for genetic storage.
+///
+/// `texture_type` now carries the active generator config inline (via
+/// [`TextureType::Procedural`]) — no separate per-generator fields.
 #[derive(Clone, Serialize, Deserialize)]
 pub struct SerializableMaterial {
     pub base_color: [f32; 3],
@@ -33,12 +171,6 @@ pub struct SerializableMaterial {
     pub uv_scale: f32,
     #[serde(default)]
     pub texture_type: TextureType,
-    #[serde(default)]
-    pub leaf_config: LeafConfig,
-    #[serde(default)]
-    pub twig_config: TwigConfig,
-    #[serde(default)]
-    pub bark_config: BarkConfig,
 }
 
 impl Default for SerializableMaterial {
@@ -51,9 +183,6 @@ impl Default for SerializableMaterial {
             metallic: 0.0,
             uv_scale: 1.0,
             texture_type: TextureType::None,
-            leaf_config: LeafConfig::default(),
-            twig_config: TwigConfig::default(),
-            bark_config: BarkConfig::default(),
         }
     }
 }
@@ -67,16 +196,13 @@ impl From<&MaterialSettings> for SerializableMaterial {
             roughness: m.roughness,
             metallic: m.metallic,
             uv_scale: m.uv_scale,
-            texture_type: m.texture,
-            leaf_config: m.leaf_config.clone(),
-            twig_config: m.twig_config.clone(),
-            bark_config: m.bark_config.clone(),
+            texture_type: m.texture.clone(),
         }
     }
 }
 
 impl SerializableMaterial {
-    /// Converts back to full [`MaterialSettings`], preserving texture type and foliage configs.
+    /// Converts back to full [`MaterialSettings`], preserving texture type and inline configs.
     pub fn to_material_settings(&self) -> MaterialSettings {
         MaterialSettings {
             base_color: self.base_color,
@@ -84,11 +210,8 @@ impl SerializableMaterial {
             emission_strength: self.emission_strength,
             roughness: self.roughness,
             metallic: self.metallic,
-            texture: self.texture_type,
+            texture: self.texture_type.clone(),
             uv_scale: self.uv_scale,
-            leaf_config: self.leaf_config.clone(),
-            twig_config: self.twig_config.clone(),
-            bark_config: self.bark_config.clone(),
         }
     }
 }
@@ -194,8 +317,7 @@ impl PlantGenotype {
                         roughness: mat.roughness,
                         metallic: mat.metallic,
                         uv_scale: mat.uv_scale,
-                        texture_type: mat.texture_type,
-                        ..Default::default()
+                        texture_type: (mat.texture)(),
                     },
                 )
             })
@@ -231,7 +353,7 @@ impl PlantGenotype {
         System::from_source(&self.source_code).ok()
     }
 
-    /// Mutates material colors and foliage texture configs.
+    /// Mutates material colors and the active procedural texture config.
     fn mutate_materials<R: Rng>(&mut self, rng: &mut R, rate: f32) {
         for settings in self.materials.values_mut() {
             if rng.random::<f32>() < rate {
@@ -243,12 +365,9 @@ impl PlantGenotype {
                 settings.roughness =
                     (settings.roughness + (rng.random::<f32>() - 0.5) * 0.3).clamp(0.0, 1.0);
             }
-            // Mutate active foliage texture config via its Genotype implementation
-            match settings.texture_type {
-                TextureType::Leaf => settings.leaf_config.mutate(rng, rate),
-                TextureType::Twig => settings.twig_config.mutate(rng, rate),
-                TextureType::Bark => settings.bark_config.mutate(rng, rate),
-                _ => {}
+            // Mutate the active procedural-texture config via its Genotype impl.
+            if let TextureType::Procedural(cfg) = &mut settings.texture_type {
+                mutate_texture_config(cfg, rng, rate);
             }
         }
     }
@@ -284,15 +403,14 @@ impl PlantGenotype {
                         emission_strength: ma.emission_strength * blend
                             + mb.emission_strength * inv_blend,
                         uv_scale: ma.uv_scale * blend + mb.uv_scale * inv_blend,
-                        texture_type: if blend >= 0.5 {
-                            ma.texture_type
-                        } else {
-                            mb.texture_type
-                        },
-                        // Use Genotype crossover for foliage configs
-                        leaf_config: ma.leaf_config.crossover(&mb.leaf_config, rng),
-                        twig_config: ma.twig_config.crossover(&mb.twig_config, rng),
-                        bark_config: ma.bark_config.crossover(&mb.bark_config, rng),
+                        // Pick a parent's texture variant; if both are the same procedural
+                        // generator, blend their configs via the Genotype crossover impl.
+                        texture_type: blend_texture_type(
+                            &ma.texture_type,
+                            &mb.texture_type,
+                            blend,
+                            rng,
+                        ),
                     }
                 }
                 (Some(m), None) | (None, Some(m)) => m.clone(),

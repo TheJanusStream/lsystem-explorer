@@ -85,8 +85,7 @@ pub fn ui_system(
                                                         emission_color: mat.emission_color,
                                                         emission_strength: mat.emission_strength,
                                                         uv_scale: mat.uv_scale,
-                                                        texture: mat.texture_type,
-                                                        ..Default::default()
+                                                        texture: (mat.texture)(),
                                                     },
                                                 );
                                             }
