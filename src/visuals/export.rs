@@ -155,7 +155,7 @@ struct ExportResult {
 /// Takes the source prop mesh, transforms vertices by the prop's position/rotation/scale,
 /// tints vertex colors by the prop's color, and appends to the bucket matching the prop's material_id.
 fn merge_prop_into_bucket(
-    buckets: &mut HashMap<u8, Mesh>,
+    buckets: &mut HashMap<u16, Mesh>,
     source_mesh: &Mesh,
     prop: &SkeletonProp,
     prop_scale: f32,
@@ -226,7 +226,7 @@ fn merge_prop_into_bucket(
     }
 
     // Get or create the bucket mesh for this material
-    let bucket = buckets.entry(prop.material_id).or_insert_with(|| {
+    let bucket = buckets.entry(prop.material_id as u16).or_insert_with(|| {
         // Create empty mesh using a zero-sized primitive, then replace attributes
         let mut mesh = Mesh::from(Cuboid::new(0.0, 0.0, 0.0));
         mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, Vec::<[f32; 3]>::new());
@@ -305,7 +305,7 @@ struct BatchExportParams {
     variation_count: usize,
     base_filename: String,
     format: ExportFormat,
-    material_settings: HashMap<u8, MaterialSettings>,
+    material_settings: HashMap<u16, MaterialSettings>,
     prop_meshes: HashMap<u16, PropMeshType>,
     prop_scale: f32,
     /// Pre-extracted prop mesh data (cloned from Assets<Mesh>), keyed by PropMeshType.

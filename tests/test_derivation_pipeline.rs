@@ -11,6 +11,8 @@ fn test_async_derivation_flow() {
     // 1. Configure the app with a simple grammar
     let mut config = app.world_mut().resource_mut::<LSystemConfig>();
     config.source_code = "omega: F\np1: F -> F+F".to_string();
+    // Clear preset-inherited finalization so the test exercises only the basic flow.
+    config.finalization_code = String::new();
     config.iterations = 2;
     config.recompile_requested = true;
 

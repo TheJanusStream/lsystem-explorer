@@ -1,6 +1,7 @@
 use crate::core::config::{
     DerivationDebounce, DerivationStatus, DirtyFlags, ExportConfig, ExportFormat, LSystemAnalysis,
-    LSystemConfig, LSystemEngine, MaterialSettingsMap, PropConfig, PropMeshType, split_source_code,
+    LSystemConfig, LSystemEngine, MaterialSettingsChanged, MaterialSettingsMap, PropConfig,
+    PropMeshType, split_source_code,
 };
 use crate::core::genotype::PlantGenotype;
 use crate::core::presets::PRESETS;
@@ -13,6 +14,7 @@ use bevy_egui::{EguiContexts, egui};
 
 #[allow(clippy::too_many_arguments)]
 pub fn ui_system(
+    mut commands: Commands,
     mut contexts: EguiContexts,
     mut config: ResMut<LSystemConfig>,
     engine: ResMut<LSystemEngine>,
@@ -88,6 +90,7 @@ pub fn ui_system(
                                                     },
                                                 );
                                             }
+                                            commands.trigger(MaterialSettingsChanged);
 
                                             // Apply preset camera settings
                                             if let Some(cam) = preset.camera {
@@ -381,7 +384,7 @@ pub fn ui_system(
                             &mut material_settings.bypass_change_detection().settings,
                         );
                         if changed {
-                            material_settings.set_changed();
+                            commands.trigger(MaterialSettingsChanged);
                         }
                     });
 
@@ -548,6 +551,23 @@ pub fn ui_system(
                                 render_state.meshing_time_ms,
                             ));
                         });
+
+                        if !render_state.warnings.is_empty() {
+                            ui.colored_label(
+                                egui::Color32::from_rgb(255, 180, 0),
+                                format!(
+                                    "⚠ {} interpreter warning(s):",
+                                    render_state.warnings.len()
+                                ),
+                            );
+                            for warning in &render_state.warnings {
+                                ui.label(
+                                    egui::RichText::new(format!("  • {warning:?}"))
+                                        .small()
+                                        .color(egui::Color32::from_rgb(220, 180, 80)),
+                                );
+                            }
+                        }
                     }
 
                     ui.checkbox(&mut config.auto_update, "Live Update");
@@ -579,6 +599,7 @@ pub fn ui_system(
                     for (slot, mat) in new_materials {
                         material_settings.settings.insert(slot, mat);
                     }
+                    commands.trigger(MaterialSettingsChanged);
                     prop_config.prop_meshes = genotype.prop_mappings;
                 }
             });

@@ -1,8 +1,8 @@
 use crate::core::config::PropMeshType;
-use bevy::platform::collections::HashMap;
-use bevy::prelude::*;
 use bevy::asset::RenderAssetUsages;
 use bevy::mesh::{Indices, PrimitiveTopology};
+use bevy::platform::collections::HashMap;
+use bevy::prelude::*;
 
 // Material-related resources (MaterialPalette, ProceduralTextures, texture generation)
 // are now provided by bevy_symbios::materials.
@@ -36,7 +36,10 @@ fn create_foliage_card(width: f32, height: f32) -> Mesh {
     // Two triangles: (0,1,2) and (0,2,3)
     let indices = Indices::U32(vec![0, 1, 2, 0, 2, 3]);
 
-    let mut mesh = Mesh::new(PrimitiveTopology::TriangleList, RenderAssetUsages::default());
+    let mut mesh = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    );
     mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, positions);
     mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, normals);
     mesh.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs);
@@ -49,10 +52,16 @@ pub fn setup_prop_assets(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>
     let mut prop_meshes = HashMap::new();
 
     // Leaf: billboard card, pivot at base (V=1), tip pointing up (V=0)
-    prop_meshes.insert(PropMeshType::Leaf, meshes.add(create_foliage_card(0.5, 0.8)));
+    prop_meshes.insert(
+        PropMeshType::Leaf,
+        meshes.add(create_foliage_card(0.5, 0.8)),
+    );
 
     // Twig: wider billboard card for composite twig cards
-    prop_meshes.insert(PropMeshType::Twig, meshes.add(create_foliage_card(0.7, 1.0)));
+    prop_meshes.insert(
+        PropMeshType::Twig,
+        meshes.add(create_foliage_card(0.7, 1.0)),
+    );
 
     // Sphere: Ico-sphere
     prop_meshes.insert(

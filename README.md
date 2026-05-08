@@ -7,12 +7,14 @@ A real-time 3D L-system visualization tool built with [Bevy](https://bevyengine.
 ## Features
 
 ### Grammar Engine
+
 - **Parametric Rules** — Define production rules with parameters, conditions, and stochastic probabilities
 - **Context-Sensitive Matching** — Left/right context operators with `#ignore` for skipping turtle symbols
 - **Two-Pass Derivation** — Separate growth and finalization (decomposition) phases for cleaner grammar design
 - **Async Derivation** — Background thread compilation prevents UI freezing during high-iteration generation
 
 ### Rendering
+
 - **Real-time Editing** — Live grammar compilation with debounced auto-update
 - **Parallel Transport Framing** — Smooth branch geometry without gimbal lock
 - **3 PBR Material Slots** — Base color, emission, roughness, metallic, UV scale, and procedural textures per slot
@@ -20,6 +22,7 @@ A real-time 3D L-system visualization tool built with [Bevy](https://bevyengine.
 - **Tropism & Elasticity** — Gravity-influenced growth simulation
 
 ### Genetic Breeding (Nursery)
+
 - **Interactive Evolutionary Computation** — Adjustable NxN population grid (default 3x3, up to 8x8) rendered in 3D world space
 - **Champion Selection** — Click individuals to mark as breeding parents; selected plants show translucent highlight panels
 - **Mutation & Crossover** — Evolve rules, constants, materials, angles, step sizes, widths, elasticity, and tropism
@@ -28,11 +31,13 @@ A real-time 3D L-system visualization tool built with [Bevy](https://bevyengine.
 - **Error Visualization** — Failed derivations shown with red panels and error messages
 
 ### Export
+
 - **OBJ** — Wavefront format with per-mesh material references
 - **GLB** — Binary glTF 2.0 with full PBR materials
 - **Batch Variations** — Generate multiple stochastic variants in one operation with async progress tracking
 
 ### Platform
+
 - **Native** — Desktop app with full performance
 - **WASM** — Runs in the browser via WebAssembly
 
@@ -51,52 +56,52 @@ cargo build --target wasm32-unknown-unknown --release
 
 Presets from Prusinkiewicz & Lindenmayer's *The Algorithmic Beauty of Plants*:
 
-| Preset | ABOP Reference | Highlights |
-|--------|---------------|------------|
-| Quadratic Koch Island | Fig 1.6 | Fractal space-filling curve |
-| Sierpinski Gasket | Fig 1.10b | Two-pass decomposition example |
-| Branching Pattern | Fig 1.39 | Parametric binary tree with tapering |
-| Monopodial Tree | Fig 2.6 | Spiral phyllotaxis, 3 branch types |
-| Sympodial Tree | Fig 2.7 | Sympodial branching architecture |
-| Ternary Tree (Gravity) | Fig 2.8 | Tropism and elasticity simulation |
-| Ternary Tree (+Props +Materials +Variations) | — | Stochastic rules, 3 materials, twig and leaf props |
+| Preset                                       | ABOP Reference | Highlights                                         |
+|----------------------------------------------|----------------|----------------------------------------------------|
+| Quadratic Koch Island                        | Fig 1.6        | Fractal space-filling curve                        |
+| Sierpinski Gasket                            | Fig 1.10b      | Two-pass decomposition example                     |
+| Branching Pattern                            | Fig 1.39       | Parametric binary tree with tapering               |
+| Monopodial Tree                              | Fig 2.6        | Spiral phyllotaxis, 3 branch types                 |
+| Sympodial Tree                               | Fig 2.7        | Sympodial branching architecture                   |
+| Ternary Tree (Gravity)                       | Fig 2.8        | Tropism and elasticity simulation                  |
+| Ternary Tree (+Props +Materials +Variations) | —              | Stochastic rules, 3 materials, twig and leaf props |
 
 ## Grammar Syntax
 
 ### Directives
 
-| Directive | Description |
-|-----------|-------------|
-| `#define NAME VALUE` | Define a constant for use in rules |
-| `#ignore: SYMBOLS` | Skip symbols during context matching |
-| `omega: ...` | Set the axiom (starting state) |
+| Directive                 | Description                             |
+|---------------------------|-----------------------------------------|
+| `#define NAME VALUE`      | Define a constant for use in rules      |
+| `#ignore: SYMBOLS`        | Skip symbols during context matching    |
+| `omega: ...`              | Set the axiom (starting state)          |
 | `pN: PRED : COND -> SUCC` | Production rule with optional condition |
 
 ### Turtle Commands
 
-| Symbol | Parameters | Description |
-|--------|------------|-------------|
-| `F` | `(length)` | Move forward, drawing a branch segment |
-| `f` | `(length)` | Move forward without drawing |
-| `+` | `(angle)` | Turn left (yaw) |
-| `-` | `(angle)` | Turn right (yaw) |
-| `&` | `(angle)` | Pitch down |
-| `^` | `(angle)` | Pitch up |
-| `/` | `(angle)` | Roll clockwise |
-| `\` | `(angle)` | Roll counter-clockwise |
-| `\|` | | Turn around (180 degrees) |
-| `$` | | Roll to vertical (align up with world Y) |
-| `[` | | Push state onto stack |
-| `]` | | Pop state from stack |
-| `!` | `(width)` | Set branch width |
+| Symbol | Parameters | Description                              |
+|--------|------------|------------------------------------------|
+| `F`    | `(length)` | Move forward, drawing a branch segment   |
+| `f`    | `(length)` | Move forward without drawing             |
+| `+`    | `(angle)`  | Turn left (yaw)                          |
+| `-`    | `(angle)`  | Turn right (yaw)                         |
+| `&`    | `(angle)`  | Pitch down                               |
+| `^`    | `(angle)`  | Pitch up                                 |
+| `/`    | `(angle)`  | Roll clockwise                           |
+| `\`    | `(angle)`  | Roll counter-clockwise                   |
+| `\|`   |            | Turn around (180 degrees)                |
+| `$`    |            | Roll to vertical (align up with world Y) |
+| `[`    |            | Push state onto stack                    |
+| `]`    |            | Pop state from stack                     |
+| `!`    | `(width)`  | Set branch width                         |
 
 ### Material & Prop Commands
 
-| Symbol | Parameters | Description |
-|--------|------------|-------------|
-| `,` | `(id)` | Switch to material ID (0, 1, or 2) |
-| `'` | `(r, g, b)` | Set vertex color (0.0–1.0 per channel) |
-| `~` | `(prop_id, scale)` | Spawn a prop at current position |
+| Symbol | Parameters         | Description                            |
+|--------|--------------------|----------------------------------------|
+| `,`    | `(id)`             | Switch to material ID (0, 1, or 2)     |
+| `'`    | `(r, g, b)`        | Set vertex color (0.0–1.0 per channel) |
+| `~`    | `(prop_id, scale)` | Spawn a prop at current position       |
 
 Available prop mesh types (prop ID to mesh mapping is configurable in the UI):
 
@@ -104,16 +109,16 @@ Available prop mesh types (prop ID to mesh mapping is configurable in the UI):
 
 ### Conditions
 
-| Condition | Description |
-|-----------|-------------|
-| `*` | Always match (wildcard) |
-| `PROB` | Stochastic: match with probability (0.0–1.0) |
-| `x > N` | Parameter comparison |
-| `x = N` | Parameter equality |
+| Condition | Description                                  |
+|-----------|----------------------------------------------|
+| `*`       | Always match (wildcard)                      |
+| `PROB`    | Stochastic: match with probability (0.0–1.0) |
+| `x > N`   | Parameter comparison                         |
+| `x = N`   | Parameter equality                           |
 
 ### Context-Sensitive Rules
 
-```
+```text
 LEFT_CONTEXT < PREDECESSOR > RIGHT_CONTEXT : CONDITION -> SUCCESSORS
 ```
 
@@ -123,13 +128,13 @@ LEFT_CONTEXT < PREDECESSOR > RIGHT_CONTEXT : CONDITION -> SUCCESSORS
 
 Use `#ignore` to skip turtle commands during context checks:
 
-```
+```text
 #ignore: + - & ^ / \ [ ]
 ```
 
 **Signal propagation example** (acropetal flow):
 
-```
+```text
 #ignore: + - & ^ / \ F
 omega: B(1) A A A A
 p1: B(x) < A -> B(x+1)
@@ -149,7 +154,7 @@ In the UI, expand the **Finalization (Decomposition)** panel below the grammar e
 
 For presets, use the `/// DECOMPOSITION ///` separator:
 
-```
+```text
 #define n 5
 omega: A(n)
 p1: A(x) : x > 0 -> F I(x) [ + A(x-1) ] [ - A(x-1) ]
@@ -162,14 +167,14 @@ p1: I(x) -> F(x*2)
 
 ### Simple Binary Tree
 
-```
+```text
 omega: A
 p1: A -> F [ + A ] [ - A ]
 ```
 
 ### Parametric Tree with Tapering
 
-```
+```text
 #define wr 0.707
 omega: A(100, 10)
 p1: A(l, w) -> !(w) F(l) [ &(30) A(l*0.7, w*wr) ] A(l*0.9, w*wr)
@@ -177,7 +182,7 @@ p1: A(l, w) -> !(w) F(l) [ &(30) A(l*0.7, w*wr) ] A(l*0.9, w*wr)
 
 ### PBR Multi-Material Tree
 
-```
+```text
 #define MAX 5
 omega: ,(0) '(0.5, 0.3, 0.2) A(MAX)
 p1: A(t) : t > 0 -> !(t*0.1) F(10) [ &(35) ,(1) '(0.2, 0.8, 0.2) B(t-1) ] A(t-1)
@@ -186,7 +191,7 @@ p2: B(t) : t > 0 -> F(5) ~(0, 0.5)
 
 ### Stochastic Branching
 
-```
+```text
 omega: A(50)
 p1: A(s) : 0.5 -> F(s) [ + A(s*0.7) ] [ - A(s*0.7) ]
 p2: A(s) : 0.5 -> F(s) [ & A(s*0.7) ]
@@ -201,7 +206,9 @@ p2: A(s) : 0.5 -> F(s) [ & A(s*0.7) ]
 ## Architecture
 
 ### Split Reactivity
+
 The update loop distinguishes between two independent dirty paths:
+
 - **Geometry Dirty** — Triggered by grammar, iteration, or interpretation changes. Runs async derivation on a background thread, then rebuilds the mesh.
 - **Material Dirty** — Triggered by palette edits (color, roughness, metallic, UV scale, texture). Only updates shader parameters — no geometry rebuild.
 
@@ -210,22 +217,26 @@ Tweaking material colors never causes expensive tree regeneration.
 ## Building
 
 ### Requirements
+
 - Rust 1.85+ (Edition 2024)
 - For WASM: `wasm32-unknown-unknown` target
 
 ### Native
+
 ```bash
 cargo build --release
 cargo run --release
 ```
 
 ### WASM
+
 ```bash
 rustup target add wasm32-unknown-unknown
 cargo build --target wasm32-unknown-unknown --release
 ```
 
 ### Tests
+
 ```bash
 cargo test
 ```

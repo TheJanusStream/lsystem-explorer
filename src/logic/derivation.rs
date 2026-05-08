@@ -1,6 +1,7 @@
 use crate::core::config::{
     CancellationFlag, DerivationResult, DerivationStatus, DerivationTask, DirtyFlags,
-    LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsMap, scan_max_material_id,
+    LSystemAnalysis, LSystemConfig, LSystemEngine, MaterialSettingsChanged, MaterialSettingsMap,
+    scan_max_material_id,
 };
 use bevy::prelude::*;
 use bevy::tasks::AsyncComputeTaskPool;
@@ -89,10 +90,9 @@ pub fn poll_derivation(
 }
 
 /// Ensures the MaterialSettingsMap has slots for all material IDs up to max_material_id.
-/// Adds default entries for any missing slots.
-/// Only takes `ResMut` when entries are actually missing, to avoid triggering
-/// Bevy's change detection unnecessarily.
+/// Adds default entries for any missing slots and triggers the observer-based palette sync.
 pub fn ensure_material_palette_size(
+    mut commands: Commands,
     analysis: Res<LSystemAnalysis>,
     mut material_settings: ResMut<MaterialSettingsMap>,
 ) {
@@ -101,8 +101,7 @@ pub fn ensure_material_palette_size(
     }
 
     // Check if any slots are missing before taking mutable access,
-    // to avoid triggering DerefMut (and thus change detection) when
-    // the map already has all needed entries.
+    // to avoid mutating the map (and waking the observer) when nothing changes.
     let needs_insert =
         (0..=analysis.max_material_id).any(|id| !material_settings.settings.contains_key(&id));
 
@@ -110,6 +109,7 @@ pub fn ensure_material_palette_size(
         for id in 0..=analysis.max_material_id {
             material_settings.settings.entry(id).or_default();
         }
+        commands.trigger(MaterialSettingsChanged);
     }
 }
 

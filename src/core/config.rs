@@ -8,7 +8,9 @@ use symbios::System;
 
 // Re-export material and export types from bevy_symbios for convenience.
 pub use bevy_symbios::export::ExportFormat;
-pub use bevy_symbios::materials::{MaterialSettings, MaterialSettingsMap, TextureType};
+pub use bevy_symbios::materials::{
+    MaterialSettings, MaterialSettingsChanged, MaterialSettingsMap, TextureType,
+};
 
 /// Geometry dirty flag for split reactivity.
 /// Geometry dirty = requires derivation + remesh.
@@ -137,6 +139,7 @@ impl Default for LSystemConfig {
 /// Startup system to apply the materials and camera settings of the default (last) preset.
 /// This ensures the scene matches the LSystemConfig loaded by Default.
 pub fn apply_startup_preset(
+    mut commands: Commands,
     mut material_settings: ResMut<MaterialSettingsMap>,
     mut camera_query: Query<&mut PanOrbitCamera>,
 ) {
@@ -158,6 +161,7 @@ pub fn apply_startup_preset(
                 },
             );
         }
+        commands.trigger(MaterialSettingsChanged);
 
         // Apply Camera
         if let Some(cam) = preset.camera {
@@ -210,7 +214,7 @@ pub struct LSystemAnalysis {
     pub uses_implicit_angle: bool,
     pub uses_explicit_width: bool,
     /// Maximum material ID referenced in the source code.
-    pub max_material_id: u8,
+    pub max_material_id: u16,
 }
 
 /// The persistent Symbios engine
@@ -273,8 +277,8 @@ pub struct DerivationTask {
 /// Scans source code for material ID usage patterns: `,(N)` where N is a number.
 /// Returns the maximum material ID found, or 0 if none.
 /// Respects L-system comment syntax (`//`): content after `//` on a line is ignored.
-pub fn scan_max_material_id(source: &str) -> u8 {
-    let mut max_id: u8 = 0;
+pub fn scan_max_material_id(source: &str) -> u16 {
+    let mut max_id: u16 = 0;
 
     for line in source.lines() {
         // Strip comments: only scan content before `//`
@@ -297,7 +301,7 @@ pub fn scan_max_material_id(source: &str) -> u8 {
 
                 if let Some(num) = std::str::from_utf8(&bytes[start..i])
                     .ok()
-                    .and_then(|s| s.parse::<u8>().ok())
+                    .and_then(|s| s.parse::<u16>().ok())
                 {
                     max_id = max_id.max(num);
                 }

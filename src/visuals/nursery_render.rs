@@ -138,11 +138,11 @@ fn material_from_settings(
 
 /// Creates per-genotype material handles from the cached material settings.
 fn create_genotype_materials(
-    cached_materials: &HashMap<u8, MaterialSettings>,
+    cached_materials: &HashMap<u16, MaterialSettings>,
     proc_textures: &ProceduralTextures,
     materials: &mut Assets<StandardMaterial>,
 ) -> (
-    HashMap<u8, Handle<StandardMaterial>>,
+    HashMap<u16, Handle<StandardMaterial>>,
     Handle<StandardMaterial>,
 ) {
     let mut handles = HashMap::new();
@@ -239,7 +239,11 @@ struct GenotypeDerivedResult {
     error: Option<String>,
 }
 
-type NurseryFoliageTask = (Task<Result<TextureMap, TextureError>>, Handle<StandardMaterial>, bool);
+type NurseryFoliageTask = (
+    Task<Result<TextureMap, TextureError>>,
+    Handle<StandardMaterial>,
+    bool,
+);
 
 /// Tracks in-flight async foliage texture generation tasks for nursery individuals.
 ///
@@ -248,7 +252,7 @@ type NurseryFoliageTask = (Task<Result<TextureMap, TextureError>>, Handle<Standa
 /// All tasks are cleared when the nursery rebuilds.
 #[derive(Resource, Default)]
 pub struct NurseryFoliageTextureTasks {
-    tasks: HashMap<(usize, u8), NurseryFoliageTask>,
+    tasks: HashMap<(usize, u16), NurseryFoliageTask>,
 }
 
 impl NurseryFoliageTextureTasks {
@@ -483,6 +487,9 @@ pub fn render_nursery_population(
                 max_stack_depth: 1024,
             };
 
+            // The cached `system` is held behind a shared reference, so we cannot
+            // intern via `with_standard_symbols`. The standard symbols are
+            // already in the interner from parsing, so populate is sufficient.
             let mut interpreter = TurtleInterpreter::new(turtle_config);
             interpreter.populate_standard_symbols(&system.interner);
 
@@ -504,23 +511,20 @@ pub fn render_nursery_population(
                 match settings.texture {
                     TextureType::Leaf => {
                         let config = settings.leaf_config.clone();
-                        let task = pool.spawn(async move {
-                            LeafGenerator::new(config).generate(512, 512)
-                        });
+                        let task = pool
+                            .spawn(async move { LeafGenerator::new(config).generate(512, 512) });
                         foliage_tasks.tasks.insert((i, slot), (task, handle, true));
                     }
                     TextureType::Twig => {
                         let config = settings.twig_config.clone();
-                        let task = pool.spawn(async move {
-                            TwigGenerator::new(config).generate(512, 512)
-                        });
+                        let task = pool
+                            .spawn(async move { TwigGenerator::new(config).generate(512, 512) });
                         foliage_tasks.tasks.insert((i, slot), (task, handle, true));
                     }
                     TextureType::Bark => {
                         let config = settings.bark_config.clone();
-                        let task = pool.spawn(async move {
-                            BarkGenerator::new(config).generate(512, 512)
-                        });
+                        let task = pool
+                            .spawn(async move { BarkGenerator::new(config).generate(512, 512) });
                         foliage_tasks.tasks.insert((i, slot), (task, handle, false));
                     }
                     _ => {}
@@ -556,7 +560,7 @@ pub fn render_nursery_population(
 
                 if let Some(handle) = mesh_handle {
                     let base_handle = geno_materials
-                        .get(&prop.material_id)
+                        .get(&(prop.material_id as u16))
                         .unwrap_or(&geno_fallback);
 
                     // For foliage-textured materials, share the base handle directly so
@@ -564,9 +568,12 @@ pub fn render_nursery_population(
                     // automatically.  For other types, create a tint-blended clone.
                     let is_foliage = cached
                         .materials
-                        .get(&prop.material_id)
+                        .get(&(prop.material_id as u16))
                         .is_some_and(|s| {
-                            matches!(s.texture, TextureType::Leaf | TextureType::Twig | TextureType::Bark)
+                            matches!(
+                                s.texture,
+                                TextureType::Leaf | TextureType::Twig | TextureType::Bark
+                            )
                         });
 
                     let prop_material = if is_foliage {
@@ -710,7 +717,7 @@ pub fn apply_nursery_foliage_textures(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
 ) {
-    type FinishedEntry = ((usize, u8), Result<TextureMap, TextureError>, bool);
+    type FinishedEntry = ((usize, u16), Result<TextureMap, TextureError>, bool);
     let mut finished: Vec<FinishedEntry> = Vec::new();
 
     for (key, (task, _handle, is_card)) in foliage_tasks.tasks.iter_mut() {

@@ -14,7 +14,28 @@ use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
 use std::hash::{Hash, Hasher};
 use symbios::System;
+use symbios_genetics::speciation::{CompatibilityDistance, Speciation};
 use symbios_genetics::{Genotype, Phenotype};
+
+/// Compatibility distance between two [`PlantGenotype`]s.
+///
+/// Combines normalized parameter differences (iterations, angle, step, width,
+/// elasticity, source-code length) into a scalar. Used by [`Speciation`] to
+/// cluster the population into niches; the metric does not need to satisfy
+/// the triangle inequality.
+pub struct PlantParamDistance;
+
+impl CompatibilityDistance<PlantGenotype> for PlantParamDistance {
+    fn distance(&self, a: &PlantGenotype, b: &PlantGenotype) -> f32 {
+        let iter_d = (a.iterations as f32 - b.iterations as f32).abs() / 4.0;
+        let angle_d = (a.angle - b.angle).abs() / 30.0;
+        let step_d = (a.step - b.step).abs() / 1.0;
+        let width_d = (a.width - b.width).abs() / 0.1;
+        let elasticity_d = (a.elasticity - b.elasticity).abs() / 0.1;
+        let src_d = (a.source_code.len() as f32 - b.source_code.len() as f32).abs() / 64.0;
+        iter_d + angle_d + step_d + width_d + elasticity_d + src_d
+    }
+}
 
 /// Combines a base seed with additional discriminants into a statistically distinct u64.
 /// Uses DefaultHasher to avoid correlation artifacts from simple linear addition.
@@ -67,7 +88,7 @@ pub struct CachedGenotypeMesh {
     /// Individual's tropism direction vector.
     pub tropism: Option<Vec3>,
     /// Individual's material settings by slot ID.
-    pub materials: HashMap<u8, MaterialSettings>,
+    pub materials: HashMap<u16, MaterialSettings>,
     /// Individual's prop ID to mesh type mapping.
     pub prop_mappings: HashMap<u16, PropMeshType>,
     /// Error message if derivation failed.
@@ -132,6 +153,12 @@ pub struct NurseryState {
     pub grid_size: usize,
     /// Derivation errors by population index (for UI display).
     pub errors: HashMap<usize, String>,
+    /// Species clustering for diversity tracking; dynamically tunes its
+    /// threshold each breed() to converge on `species_target`.
+    pub speciation: Speciation<PlantGenotype, PlantParamDistance>,
+    /// When true, [`Speciation::share_fitness`] divides each phenotype's
+    /// fitness by its species size to prevent any one niche from dominating.
+    pub fitness_sharing: bool,
 }
 
 impl Default for NurseryState {
@@ -147,6 +174,8 @@ impl Default for NurseryState {
             grid_spacing: GRID_SPACING,
             grid_size: 3,
             errors: HashMap::new(),
+            speciation: Speciation::new(PlantParamDistance, 1.5, 3),
+            fitness_sharing: false,
         }
     }
 }
@@ -209,6 +238,9 @@ impl NurseryState {
         self.generation = 0;
         self.selected.clear();
         self.selected.insert(0);
+
+        // Seed species clustering from the initial population.
+        self.speciation.assign(&self.population);
     }
 
     /// Resizes the population when grid size changes.
@@ -316,6 +348,13 @@ impl NurseryState {
 
         self.population = new_population;
         self.generation += 1;
+
+        // Update species clustering and (optionally) apply fitness sharing.
+        self.speciation.assign(&self.population);
+        if self.fitness_sharing {
+            self.speciation.share_fitness(&mut self.population);
+        }
+        self.speciation.adjust_threshold();
 
         // Update selection to point to preserved champions (now at start of population)
         self.selected.clear();
@@ -444,6 +483,13 @@ pub fn nursery_ui(
         ui.horizontal(|ui| {
             ui.label("Mutation Rate:");
             ui.add(egui::Slider::new(&mut nursery.mutation_rate, 0.01..=0.5));
+        });
+
+        ui.horizontal(|ui| {
+            ui.checkbox(&mut nursery.fitness_sharing, "Fitness Sharing");
+            let species_count = nursery.speciation.species().len();
+            let threshold = nursery.speciation.threshold();
+            ui.label(format!("| Species: {species_count} (τ={threshold:.2})"));
         });
 
         ui.horizontal(|ui| {

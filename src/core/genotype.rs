@@ -105,7 +105,7 @@ pub struct PlantGenotype {
     /// Optional finalization/decomposition code for two-pass derivation.
     pub finalization_code: String,
     /// Material settings by slot ID (serializable).
-    pub materials: HashMap<u8, SerializableMaterial>,
+    pub materials: HashMap<u16, SerializableMaterial>,
     /// Number of derivation iterations.
     pub iterations: usize,
     /// Default turn angle in degrees.
@@ -150,7 +150,7 @@ impl PlantGenotype {
     }
 
     /// Sets the material settings from a MaterialSettings HashMap.
-    pub fn with_materials(mut self, materials: &HashMap<u8, MaterialSettings>) -> Self {
+    pub fn with_materials(mut self, materials: &HashMap<u16, MaterialSettings>) -> Self {
         self.materials = materials
             .iter()
             .map(|(&k, v)| (k, SerializableMaterial::from(v)))
@@ -181,7 +181,7 @@ impl PlantGenotype {
         let (growth, finalization) = split_source_code(preset.code);
 
         // Convert preset materials to serializable format
-        let materials: HashMap<u8, SerializableMaterial> = preset
+        let materials: HashMap<u16, SerializableMaterial> = preset
             .materials
             .iter()
             .map(|(slot, mat)| {
@@ -217,7 +217,7 @@ impl PlantGenotype {
     }
 
     /// Returns materials converted to MaterialSettings.
-    pub fn get_material_settings(&self) -> HashMap<u8, MaterialSettings> {
+    pub fn get_material_settings(&self) -> HashMap<u16, MaterialSettings> {
         self.materials
             .iter()
             .map(|(&k, v)| (k, v.to_material_settings()))
@@ -255,11 +255,11 @@ impl PlantGenotype {
 
     /// Blends materials from two parents using foliage config crossover.
     fn blend_materials<R: Rng>(
-        a: &HashMap<u8, SerializableMaterial>,
-        b: &HashMap<u8, SerializableMaterial>,
+        a: &HashMap<u16, SerializableMaterial>,
+        b: &HashMap<u16, SerializableMaterial>,
         blend: f32,
         rng: &mut R,
-    ) -> HashMap<u8, SerializableMaterial> {
+    ) -> HashMap<u16, SerializableMaterial> {
         let mut result = HashMap::new();
 
         let all_slots: std::collections::HashSet<_> = a.keys().chain(b.keys()).copied().collect();
@@ -284,7 +284,11 @@ impl PlantGenotype {
                         emission_strength: ma.emission_strength * blend
                             + mb.emission_strength * inv_blend,
                         uv_scale: ma.uv_scale * blend + mb.uv_scale * inv_blend,
-                        texture_type: if blend >= 0.5 { ma.texture_type } else { mb.texture_type },
+                        texture_type: if blend >= 0.5 {
+                            ma.texture_type
+                        } else {
+                            mb.texture_type
+                        },
                         // Use Genotype crossover for foliage configs
                         leaf_config: ma.leaf_config.crossover(&mb.leaf_config, rng),
                         twig_config: ma.twig_config.crossover(&mb.twig_config, rng),

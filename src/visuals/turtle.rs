@@ -4,9 +4,9 @@ use crate::visuals::assets::PropMeshAssets;
 use bevy::platform::collections::HashMap;
 use bevy::platform::time::Instant;
 use bevy::prelude::*;
-use bevy_symbios::LSystemMeshBuilder;
 use bevy_symbios::materials::MaterialPalette;
-use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter};
+use bevy_symbios::{LSystemMeshBuilder, MeshCache};
+use symbios_turtle_3d::{TurtleConfig, TurtleInterpreter, TurtleWarning};
 
 /// Component tag for the main editor L-system meshes.
 #[derive(Component)]
@@ -58,7 +58,7 @@ pub fn get_or_create_prop_material(
 
     let base_handle = palette
         .materials
-        .get(&material_id)
+        .get(&(material_id as u16))
         .unwrap_or(&palette.primary_material);
 
     let base_mat = materials.get(base_handle).cloned().unwrap_or_default();
@@ -91,13 +91,16 @@ pub struct TurtleRenderState {
     pub total_vertices: usize,
     pub meshing_time_ms: f32,
     pub derivation_time_ms: f32,
+    /// Non-fatal warnings reported by the turtle interpreter on the last build.
+    /// Cleared on each successful render.
+    pub warnings: Vec<TurtleWarning>,
 }
 
 #[allow(clippy::too_many_arguments)]
 pub fn render_turtle(
     mut commands: Commands,
     mut dirty: ResMut<DirtyFlags>,
-    engine: Res<LSystemEngine>,
+    mut engine: ResMut<LSystemEngine>,
     config: Res<LSystemConfig>,
     prop_config: Res<PropConfig>,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -106,6 +109,7 @@ pub fn render_turtle(
     mut prop_material_cache: ResMut<PropMaterialCache>,
     prop_assets: Res<PropMeshAssets>,
     mut render_state: ResMut<TurtleRenderState>,
+    mut mesh_cache: ResMut<MeshCache>,
     old_meshes: Query<Entity, With<LSystemMeshTag>>,
     old_props: Query<Entity, With<LSystemPropTag>>,
 ) {
@@ -114,7 +118,7 @@ pub fn render_turtle(
     }
     dirty.geometry = false;
 
-    let sys = &engine.0;
+    let sys = &mut engine.0;
 
     // 1. Cleanup (retain prop material cache across rebuilds to avoid asset churn)
     for entity in &old_meshes {
@@ -159,20 +163,22 @@ pub fn render_turtle(
         max_stack_depth: 1024,
     };
 
-    let mut interpreter = TurtleInterpreter::new(turtle_config);
-    interpreter.populate_standard_symbols(&sys.interner);
+    let interpreter =
+        TurtleInterpreter::new(turtle_config).with_standard_symbols(&mut sys.interner);
 
     // 3. Build Skeleton (Geometry + Props)
     let skeleton = interpreter.build_skeleton(&sys.state);
 
-    // 4. Mesh Branches (Multi-Material Support)
+    // 4. Mesh Branches (content-hashed cache; identical skeletons reuse mesh handles).
     let builder = LSystemMeshBuilder::new().with_resolution(config.mesh_resolution);
-    let mesh_buckets = builder.build(&skeleton);
+    let mesh_handles = builder.build_cached(&skeleton, &mut mesh_cache, &mut meshes);
 
     let mut total_verts = 0;
 
-    for (material_id, mesh) in mesh_buckets {
-        total_verts += mesh.count_vertices();
+    for (material_id, mesh_handle) in mesh_handles {
+        if let Some(mesh) = meshes.get(&mesh_handle) {
+            total_verts += mesh.count_vertices();
+        }
 
         let material = palette
             .materials
@@ -181,7 +187,7 @@ pub fn render_turtle(
             .clone();
 
         commands.spawn((
-            Mesh3d(meshes.add(mesh)),
+            Mesh3d(mesh_handle),
             MeshMaterial3d(material),
             Transform::IDENTITY,
             LSystemMeshTag,
@@ -232,6 +238,7 @@ pub fn render_turtle(
 
     render_state.total_vertices = total_verts;
     render_state.meshing_time_ms = start_time.elapsed().as_secs_f32() * 1000.0;
+    render_state.warnings = skeleton.warnings.clone();
 }
 
 /// System that updates prop materials when the MaterialPalette changes.

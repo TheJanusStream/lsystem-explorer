@@ -63,7 +63,7 @@ pub struct LSystemPreset {
     /// Initial turtle color (RGB, 0-1 range).
     pub initial_color: Option<[f32; 3]>,
     /// Material settings for each material slot (slot_id, material).
-    pub materials: &'static [(u8, PresetMaterial)],
+    pub materials: &'static [(u16, PresetMaterial)],
     /// Camera settings override.
     pub camera: Option<PresetCamera>,
     /// Prop ID to mesh type mapping.

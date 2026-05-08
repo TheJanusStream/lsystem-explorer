@@ -1,6 +1,7 @@
 // tests/common/mod.rs
 use bevy::ecs::system::RunSystemOnce;
 use bevy::prelude::*;
+use bevy_symbios::MeshCache;
 use lsystem_explorer::core::config::*;
 use lsystem_explorer::visuals::export::ExportStatus;
 use lsystem_explorer::visuals::turtle::{PropMaterialCache, TurtleRenderState};
@@ -33,7 +34,8 @@ pub fn setup_headless_app() -> App {
         .init_resource::<ExportConfig>()
         .init_resource::<ExportStatus>()
         .init_resource::<TurtleRenderState>()
-        .init_resource::<PropMaterialCache>();
+        .init_resource::<PropMaterialCache>()
+        .init_resource::<MeshCache>();
 
     // Mock the asset setup usually done in main.rs
     // run_system_once takes the function directly
