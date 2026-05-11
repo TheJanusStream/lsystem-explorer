@@ -30,7 +30,7 @@ pub fn save_file(filename: &str, content: &str) -> Result<(), String> {
     let blob_parts = js_sys::Array::new();
     blob_parts.push(&wasm_bindgen::JsValue::from_str(content));
 
-    let mut options = web_sys::BlobPropertyBag::new();
+    let options = web_sys::BlobPropertyBag::new();
     options.set_type("text/plain");
 
     let blob = web_sys::Blob::new_with_str_sequence_and_options(&blob_parts, &options)
@@ -83,7 +83,7 @@ pub fn save_file_binary(filename: &str, content: &[u8]) -> Result<(), String> {
     let parts = js_sys::Array::new();
     parts.push(&uint8arr);
 
-    let mut options = web_sys::BlobPropertyBag::new();
+    let options = web_sys::BlobPropertyBag::new();
     options.set_type("application/octet-stream");
 
     let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)
