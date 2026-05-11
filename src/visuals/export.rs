@@ -31,7 +31,7 @@ pub fn save_file(filename: &str, content: &str) -> Result<(), String> {
     blob_parts.push(&wasm_bindgen::JsValue::from_str(content));
 
     let mut options = web_sys::BlobPropertyBag::new();
-    options.type_("text/plain");
+    options.set_type("text/plain");
 
     let blob = web_sys::Blob::new_with_str_sequence_and_options(&blob_parts, &options)
         .map_err(|e| format!("Failed to create blob: {:?}", e))?;
@@ -84,7 +84,7 @@ pub fn save_file_binary(filename: &str, content: &[u8]) -> Result<(), String> {
     parts.push(&uint8arr);
 
     let mut options = web_sys::BlobPropertyBag::new();
-    options.type_("application/octet-stream");
+    options.set_type("application/octet-stream");
 
     let blob = web_sys::Blob::new_with_u8_array_sequence_and_options(&parts, &options)
         .map_err(|e| format!("Failed to create blob: {:?}", e))?;
